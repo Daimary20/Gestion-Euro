@@ -4,22 +4,14 @@ from datetime import datetime
 from supabase import create_client, Client
 
 # --- 1. CONEXIÓN A SUPABASE ---
-# Encuentra estos datos en: Settings -> API en tu panel de Supabase
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co" 
+# PEGA TU LLAVE ABAJO (la que empieza por sb_publishable)
 KEY_SUPABASE = "sb_publishable_h7zleHEMdqtAVnEbOjTDJA_fwt_HGNb"
 
 supabase: Client = create_client(URL_SUPABASE, KEY_SUPABASE)
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="EURO Gestión Cloud", layout="wide")
-
-# Estilo para mejorar la visualización
-st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
 
 # --- CONTROL DE SESIÓN ---
 if 'autenticado' not in st.session_state:
@@ -29,7 +21,7 @@ if 'autenticado' not in st.session_state:
 # --- PANTALLA DE ACCESO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Sistema EURO Control")
-    tab1, tab2 = st.tabs(["🔐 Iniciar Sesión", "📝 Registrarse"])
+    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registrarse", "❓ Olvidé mis datos"])
     
     with tab1:
         with st.form("login_form"):
@@ -45,33 +37,44 @@ if not st.session_state['autenticado']:
                     st.error("Usuario o contraseña incorrectos")
 
     with tab2:
-        st.subheader("Crear nueva cuenta")
+        st.subheader("Crear nueva cuenta de técnico")
         with st.form("reg_form"):
-            new_u = st.text_input("Nombre de Usuario")
-            new_p = st.text_input("Contraseña Nueva", type="password")
-            confirm_p = st.text_input("Confirmar Contraseña", type="password")
+            new_u = st.text_input("Escribe un Nombre de Usuario")
+            new_p = st.text_input("Crea una Contraseña", type="password")
+            confirm_p = st.text_input("Confirma la Contraseña", type="password")
             if st.form_submit_button("REGISTRAR"):
                 if new_u and new_p == confirm_p:
                     try:
                         supabase.table("usuarios").insert({"usuario": new_u, "clave": new_p}).execute()
-                        st.success("✅ Cuenta creada. Ya puedes iniciar sesión.")
+                        st.success("✅ Registro exitoso. Ahora puedes Iniciar Sesión.")
                     except:
                         st.error("❌ El usuario ya existe.")
                 else:
-                    st.warning("⚠️ Datos inválidos o contraseñas no coinciden.")
+                    st.warning("⚠️ Las contraseñas no coinciden.")
 
-# --- PANEL PRINCIPAL ---
+    with tab3:
+        st.subheader("Recuperar Acceso")
+        st.info("Por seguridad, introduce tu nombre de usuario para ver tu clave.")
+        user_buscar = st.text_input("Introduce tu nombre de usuario")
+        if st.button("VER MI CONTRASEÑA"):
+            if user_buscar:
+                res = supabase.table("usuarios").select("clave").eq("usuario", user_buscar).execute()
+                if res.data:
+                    st.success(f"Tu contraseña es: **{res.data[0]['clave']}**")
+                else:
+                    st.error("El usuario no existe en la base de datos.")
+
+# --- PANEL PRINCIPAL (YA DENTRO) ---
 else:
     st.sidebar.title(f"👤 {st.session_state['usuario']}")
-    opcion = st.sidebar.radio("Menú:", ["📝 Registrar Trabajo", "🔍 Buscador Avanzado", "🚪 Salir"])
+    opcion = st.sidebar.radio("Menú:", ["📝 Registrar Trabajo", "🔍 Buscador Avanzado", "🚪 Cerrar Sesión"])
 
-    if opcion == "🚪 Salir":
+    if opcion == "🚪 Cerrar Sesión":
         st.session_state['autenticado'] = False
         st.rerun()
 
     elif opcion == "📝 Registrar Trabajo":
         st.header("📝 Nuevo Reporte de Actividad")
-        
         with st.form("form_trabajo", clear_on_submit=True):
             col1, col2 = st.columns(2)
             area = col1.text_input("📍 Área / Ubicación")
@@ -81,19 +84,19 @@ else:
             fec = col3.date_input("📅 Fecha", datetime.now())
             hor = col4.time_input("🕒 Hora", datetime.now())
             
-            desc = st.text_area("📝 Descripción detallada")
+            desc = st.text_area("📝 Descripción")
             archivo = st.file_uploader("📷 Adjuntar Foto o Video", type=["jpg", "png", "jpeg", "mp4"])
             
             if st.form_submit_button("GUARDAR REPORTE"):
                 if equipo and archivo:
-                    # 1. Subir archivo a Storage (Bucket 'evidencias')
                     file_ext = archivo.name.split(".")[-1]
                     file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_ext}"
                     
+                    # Subir a Storage
                     supabase.storage.from_("evidencias").upload(file_name, archivo.getvalue())
                     url_file = supabase.storage.from_("evidencias").get_public_url(file_name)
                     
-                    # 2. Guardar datos en Tabla
+                    # Guardar en Tabla
                     datos = {
                         "fecha": fec.strftime("%d/%m/%Y"),
                         "hora": hor.strftime("%H:%M"),
@@ -104,19 +107,17 @@ else:
                         "url_multimedia": url_file
                     }
                     supabase.table("reportes_euro").insert(datos).execute()
-                    st.success("✅ Guardado en la nube con éxito.")
+                    st.success("✅ Guardado correctamente.")
                     st.balloons()
                 else:
-                    st.error("⚠️ El equipo y el archivo son obligatorios.")
+                    st.error("⚠️ Falta el equipo o el archivo.")
 
     elif opcion == "🔍 Buscador Avanzado":
-        st.header("🔍 Historial de Actividades")
+        st.header("🔍 Historial Cloud")
         res = supabase.table("reportes_euro").select("*").execute()
-        
         if res.data:
             df = pd.DataFrame(res.data)
-            busqueda = st.text_input("🔍 Filtrar reportes...")
-            
+            busqueda = st.text_input("🔍 Buscar por área, equipo o técnico...")
             if busqueda:
                 df = df[df.astype(str).apply(lambda x: x.str.contains(busqueda, case=False)).any(axis=1)]
             
@@ -133,6 +134,4 @@ else:
                             st.video(url)
                         else:
                             st.image(url, use_container_width=True)
-        else:
-            st.info("No hay registros todavía.")
 

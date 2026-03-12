@@ -3,100 +3,82 @@ import pandas as pd
 from datetime import datetime
 from supabase import create_client, Client
 
-# --- 1. CONEXIÓN A SUPABASE ---
-# REEMPLAZA CON TUS DATOS REALES DE SUPABASE
+# --- CONEXIÓN ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co" 
-KEY_SUPABASE = "sb_publishable_h7zleHEMdqtAVnEbOjTDJA_fwt_HGNb"
-
+KEY_SUPABASE = "TU_CLAVE_SB_PUBLISHABLE_AQUI" # Pon tu clave aquí
 supabase: Client = create_client(URL_SUPABASE, KEY_SUPABASE)
 
-# --- CONFIGURACIÓN ---
 st.set_page_config(page_title="EURO Gestión Cloud", layout="wide")
 
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
-    st.session_state['usuario'] = ""
 
-# --- ACCESO ---
+# --- LÓGICA DE ACCESO ---
 if not st.session_state['autenticado']:
-    st.title("🏗️ Sistema EURO Control")
+    st.title("🏗️ EURO Control")
     t1, t2, t3 = st.tabs(["🔐 Login", "📝 Registro", "📧 Recuperar"])
     
     with t1:
-        with st.form("login"):
-            u = st.text_input("Usuario")
-            p = st.text_input("Clave", type="password")
-            if st.form_submit_button("ENTRAR"):
-                res = supabase.table("usuarios").select("*").eq("usuario", u).eq("clave", p).execute()
-                if res.data:
-                    st.session_state['autenticado'] = True
-                    st.session_state['usuario'] = u
-                    st.rerun()
-                else:
-                    st.error("Datos incorrectos")
+        u = st.text_input("Usuario")
+        p = st.text_input("Clave", type="password")
+        if st.button("Entrar"):
+            res = supabase.table("usuarios").select("*").eq("usuario", u).eq("clave", p).execute()
+            if res.data:
+                st.session_state['autenticado'] = True
+                st.session_state['usuario'] = u
+                st.rerun()
+            else: st.error("Error de acceso")
 
     with t2:
-        with st.form("reg"):
-            nu = st.text_input("Nuevo Usuario")
-            ne = st.text_input("Correo")
-            np = st.text_input("Nueva Clave", type="password")
-            if st.form_submit_button("REGISTRAR"):
-                supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
-                st.success("Cuenta creada")
+        nu = st.text_input("Nuevo Usuario")
+        ne = st.text_input("Correo")
+        np = st.text_input("Nueva Clave", type="password")
+        if st.button("Registrar"):
+            supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
+            st.success("¡Registrado!")
 
     with t3:
-        em = st.text_input("Correo de recuperación")
+        em = st.text_input("Tu Correo")
         if st.button("Recuperar"):
             res = supabase.table("usuarios").select("*").eq("correo", em).execute()
             if res.data:
                 st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
+            else: st.error("Correo no encontrado")
 
-# --- APP PRINCIPAL ---
 else:
-    st.sidebar.title(f"👤 {st.session_state['usuario']}")
-    opcion = st.sidebar.radio("Menú", ["Registrar", "Buscar", "Salir"])
-
-    if opcion == "Salir":
+    # --- APP PRINCIPAL ---
+    st.sidebar.write(f"Usuario: {st.session_state['usuario']}")
+    if st.sidebar.button("Salir"):
         st.session_state['autenticado'] = False
         st.rerun()
 
-    elif opcion == "Registrar":
-        st.header("📝 Nuevo Reporte")
-        with st.form("trabajo", clear_on_submit=True):
-            area = st.text_input("📍 Área")
-            equipo = st.text_input("📦 Equipo")
-            desc = st.text_area("📝 Descripción")
-            archivo = st.file_uploader("📷 Foto/Video", type=["jpg","png","jpeg","mp4"])
-            
-            if st.form_submit_button("GUARDAR"):
-                if equipo and archivo:
-                    fname = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                    supabase.storage.from_("evidencias").upload(fname, archivo.getvalue())
+    menu = st.sidebar.radio("Ir a:", ["Registrar", "Historial"])
+
+    if menu == "Registrar":
+        with st.form("registro"):
+            eq = st.text_input("Equipo")
+            ar = st.text_input("Área")
+            de = st.text_area("Descripción")
+            f = st.file_uploader("Foto/Video", type=["jpg","png","mp4"])
+            if st.form_submit_button("Guardar"):
+                if eq and f:
+                    fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
+                    supabase.storage.from_("evidencias").upload(fname, f.getvalue())
                     url = supabase.storage.from_("evidencias").get_public_url(fname)
                     
-                    datos = {
+                    supabase.table("reportes_euro").insert({
                         "fecha": datetime.now().strftime("%d/%m/%Y"),
                         "tecnico": st.session_state['usuario'],
-                        "area": area,
-                        "equipo": equipo,
-                        "descripcion": desc,
-                        "url_multimedia": url
-                    }
-                    supabase.table("reportes_euro").insert(datos).execute()
-                    st.success("✅ Guardado")
-                else:
-                    st.error("Faltan datos")
+                        "area": ar, "equipo": eq, "descripcion": de, "url_multimedia": url
+                    }).execute()
+                    st.success("Guardado")
+                else: st.error("Faltan datos")
 
-    elif opcion == "Buscar":
-        st.header("🔍 Historial")
+    if menu == "Historial":
         res = supabase.table("reportes_euro").select("*").execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            for _, r in df.iloc[::-1].iterrows():
-                with st.expander(f"{r['fecha']} - {r['equipo']}"):
-                    st.write(f"**Técnico:** {r['tecnico']} | **Área:** {r['area']}")
-                    st.write(f"**Descripción:** {r['descripcion']}")
-                    if r['url_multimedia'].lower().endswith('.mp4'):
-                        st.video(r['url_multimedia'])
-                    else:
-                        st.image(r['url_multimedia'])
+        for r in res.data[::-1]:
+            with st.expander(f"{r['fecha']} - {r['equipo']}"):
+                st.write(f"Técnico: {r['tecnico']} | Área: {r['area']}")
+                st.write(de)
+                if r['url_multimedia'].endswith('.mp4'): st.video(r['url_multimedia'])
+                else: st.image(r['url_multimedia'])

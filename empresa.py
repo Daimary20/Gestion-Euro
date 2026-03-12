@@ -107,4 +107,43 @@ else:
             hor = c4.time_input("🕒 Hora", datetime.now())
             
             desc = st.text_area("📝 Descripción del trabajo")
-            foto = st.file_uploader("📷 Foto de Evidencia (
+            foto = st.file_uploader("📷 Foto de Evidencia (Obligatoria)", type=["jpg", "png", "jpeg"])
+            
+            if st.form_submit_button("GUARDAR REPORTE"):
+                if equipo and foto:
+                    foto_txt = procesar_foto(foto)
+                    datos = {
+                        "Fecha": fec.strftime("%d/%m/%Y"),
+                        "Hora": hor.strftime("%H:%M"),
+                        "Técnico": st.session_state['usuario'],
+                        "Área": area,
+                        "Equipo": equipo,
+                        "Descripción": desc,
+                        "Foto_Data": foto_txt
+                    }
+                    pd.DataFrame([datos]).to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False, encoding='utf-8-sig')
+                    st.success("✅ Reporte guardado.")
+                    st.balloons()
+                else:
+                    st.error("⚠️ Faltan datos o la foto.")
+
+    elif opcion == "🔍 Buscador Avanzado":
+        st.header("🔍 Historial de Reportes")
+        if os.path.exists(DB_FILE):
+            df = pd.read_csv(DB_FILE)
+            filtro = st.text_input("🔍 Buscar por área, equipo, técnico...")
+            if filtro:
+                df = df[df.astype(str).apply(lambda x: x.str.contains(filtro, case=False)).any(axis=1)]
+            
+            for _, row in df.iloc[::-1].iterrows():
+                with st.expander(f"📋 {row['Fecha']} | {row['Técnico']} | {row['Equipo']}"):
+                    c1, c2 = st.columns([2, 1])
+                    with c1:
+                        st.write(f"**🕒 Hora:** {row['Hora']}")
+                        st.write(f"**📍 Área:** {row['Área']}")
+                        st.write(f"**📝 Descripción:** {row['Descripción']}")
+                    with c2:
+                        if 'Foto_Data' in row and pd.notna(row['Foto_Data']):
+                            st.image(base64.b64decode(row['Foto_Data']), use_container_width=True)
+        else:
+            st.info("No hay reportes todavía.")

@@ -5,8 +5,8 @@ from supabase import create_client, Client
 
 # --- 1. CONEXIÓN A SUPABASE ---
 # Encuentra estos datos en: Settings -> API en tu panel de Supabase
-URL_SUPABASE = "TU_PROJECT_URL_AQUI" 
-KEY_SUPABASE = "TU_ANON_KEY_AQUI"
+URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co" 
+KEY_SUPABASE = "sb_publishable_h7zleHEMdqtAVnEbOjTDJA_fwt_HGNb"
 
 supabase: Client = create_client(URL_SUPABASE, KEY_SUPABASE)
 
@@ -135,3 +135,4 @@ else:
                             st.image(url, use_container_width=True)
         else:
             st.info("No hay registros todavía.")
+

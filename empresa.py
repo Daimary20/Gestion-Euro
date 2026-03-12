@@ -7,9 +7,9 @@ import json
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="EURO Gestión Pro", layout="wide")
 
-# CONFIGURACIÓN DE ENLACES (Pega los tuyoshttps://docs.google.com/spreadsheets/d/e/2PACX-1vTrL2GKdcGjFfPBsh-3nm-gshEqx_05OMloc3N1Q0s3yFQt8Qpq0uMTGvlb_2KwF0GGmPaVPOA3my_N/pub?output=csv aquí)
-URL_GOOGLE_SCRIPT = "TU_URL_DE_APPS_SCRIPT_AQUI"
-URL_CSV_LECTURA = "TU_LINK_DE_PUBLICAR_EN_LA_WEB_CSV_AQUI"
+# CONFIGURACIÓN DE ENLACES (Pega los tuyos aquí)
+URL_GOOGLE_SCRIPT = "https://gestion-euro-iebyhcq3f9vhb82ov7hhax.streamlit.app/~/+/LINK_DE_TU_HOJA_DE_CALCULO_AQUI#nuevo-reporte-de-actividad"
+URL_CSV_LECTURA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrL2GKdcGjFfPBsh-3nm-gshEqx_05OMloc3N1Q0s3yFQt8Qpq0uMTGvlb_2KwF0GGmPaVPOA3my_N/pub?output=csv"
 
 st.sidebar.title("🛠️ Menú EURO")
 opcion = st.sidebar.radio("Ir a:", ["📝 Nuevo Reporte", "📊 Ver Historial / Buscar"])
@@ -68,4 +68,5 @@ else:
             st.warning("Aún no hay datos para mostrar o el enlace de publicación no es correcto.")
     else:
         st.info("Introduce la contraseña en el menú lateral para ver los reportes.")
+
 

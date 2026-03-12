@@ -4,60 +4,86 @@ from datetime import datetime
 import requests
 import json
 
-# --- CONFIGURACIÓN ESTÉTICA ---
+# --- CONFIGURACIÓN ---
 st.set_page_config(page_title="EURO Gestión Pro", layout="wide")
 
-# --- REEMPLAZA CON TU URL DE GOOGLE APPS SCRIPT ---
-URL_GOOGLE = "TU_URL_DE_APPS_SCRIPT_AQUI"
+URL_GOOGLE_SCRIPT = "TU_URL_DE_APPS_SCRIPT_AQUI"
+# AQUÍ PEGA EL LINK DE "PUBLICAR EN LA WEB" COMO CSV
+URL_CSV_LECTURA = "TU_LINK_DE_PUBLICAR_EN_LA_WEB_CSV_AQUI"
 
 st.sidebar.title("🛠️ Menú EURO")
 opcion = st.sidebar.radio("Ir a:", ["📝 Reporte Diario", "📊 Panel Admin"])
 
+# --- PESTAÑA 1: REPORTE (Se queda igual) ---
 if opcion == "📝 Reporte Diario":
     st.header("Nuevo Reporte de Actividad")
-    
     with st.form("form_euro", clear_on_submit=True):
-        # Campos de identificación
-        col_tecnico, col_area = st.columns(2)
-        emp = col_tecnico.text_input("👤 Nombre del Técnico")
-        area = col_area.text_input("📍 Área de Trabajo (Ej: Cocina, Taller, Cliente X)")
+        col1, col2 = st.columns(2)
+        emp = col1.text_input("👤 Nombre del Técnico")
+        area = col2.text_input("📍 Área de Trabajo")
+        prod = st.text_input("📦 Equipo / Máquina")
         
-        # Campo de equipo
-        prod = st.text_input("📦 Equipo / Máquina (Ej: Horno Blodgett)")
+        col3, col4 = st.columns(2)
+        fec = col3.date_input("📅 Fecha", datetime.now())
+        hor = col4.time_input("🕒 Hora", datetime.now())
         
-        # Campos de tiempo (Ahora editables)
-        col_fecha, col_hora = st.columns(2)
-        fec_manual = col_fecha.date_input("📅 Fecha del Trabajo", datetime.now())
-        hor_manual = col_hora.time_input("🕒 Hora del Trabajo", datetime.now())
+        desc = st.text_area("📝 Detalles del Trabajo")
+        foto = st.file_uploader("📷 Foto", type=["jpg", "png", "jpeg"])
         
-        # Descripción y Foto
-        desc = st.text_area("📝 Detalles del Trabajo Realizado")
-        foto = st.file_uploader("📷 Subir Foto del Trabajo", type=["jpg", "png", "jpeg"])
-        
-        if st.form_submit_button("ENVIAR REPORTE A LA NUBE"):
-            if emp and prod and area:
-                # Preparamos los datos para Google Sheets
-                datos = {
-                    "fecha": fec_manual.strftime("%d/%m/%Y"),
-                    "hora": hor_manual.strftime("%H:%M"),
-                    "empleado": emp,
-                    "area": area, # Enviamos la nueva variable Area
-                    "producto": prod,
-                    "descripcion": desc,
-                    "foto_url": "Foto cargada" # Luego configuraremos la subida real de imagen
-                }
-                
-                try:
-                    requests.post(URL_GOOGLE, data=json.dumps(datos))
-                    st.success(f"✅ ¡Excelente! El reporte de {prod} en {area} ha sido guardado.")
-                    st.balloons()
-                except:
-                    st.error("❌ Error de conexión. Revisa el link de Google Script.")
-            else:
-                st.warning("⚠️ Por favor llena Nombre, Área y Producto.")
+        if st.form_submit_button("ENVIAR REPORTE"):
+            datos = {
+                "fecha": fec.strftime("%d/%m/%Y"),
+                "hora": hor.strftime("%H:%M"),
+                "empleado": emp,
+                "area": area,
+                "producto": prod,
+                "descripcion": desc,
+                "foto_url": "Ver en Drive"
+            }
+            requests.post(URL_GOOGLE_SCRIPT, data=json.dumps(datos))
+            st.success("✅ Reporte guardado en la nube")
 
-elif opcion == "📊 Panel Admin":
-    st.header("Panel Administrativo")
-    st.info("Desde aquí puedes acceder a tu base de datos central en Google.")
-    # Coloca aquí el link de tu hoja de Google Sheets
-    st.link_button("📂 Abrir Base de Datos (Excel)", "LINK_DE_TU_HOJA_DE_CALCULO_AQUI")
+# --- PESTAÑA 2: PANEL ADMIN CON BUSCADOR ---
+else:
+    st.header("📊 Buscador de Reportes")
+    pw = st.sidebar.text_input("Clave de Acceso", type="password")
+    
+    if pw == "admin": # Tu clave
+        try:
+            # Leemos los datos directamente de Google
+            df = pd.read_csv(URL_CSV_LECTURA)
+            
+            # --- SECCIÓN DE FILTROS ---
+            st.subheader("🔍 Filtros de Búsqueda")
+            c1, c2, c3 = st.columns(3)
+            
+            busqueda_general = c1.text_input("Buscar por Técnico o Equipo")
+            filtro_area = c2.selectbox("Filtrar por Área", ["Todas"] + list(df['Área'].unique()))
+            filtro_fecha = c3.text_input("Buscar Fecha (DD/MM/YYYY)")
+
+            # Aplicar filtros
+            df_filtrado = df.copy()
+            
+            if busqueda_general:
+                df_filtrado = df_filtrado[df_filtrado.astype(str).apply(lambda x: x.str.contains(busqueda_general, case=False)).any(axis=1)]
+            
+            if filtro_area != "Todas":
+                df_filtrado = df_filtrado[df_filtrado['Área'] == filtro_area]
+                
+            if filtro_fecha:
+                df_filtrado = df_filtrado[df_filtrado['Fecha'] == filtro_fecha]
+
+            # --- MOSTRAR RESULTADOS ---
+            st.write(f"Se encontraron **{len(df_filtrado)}** reportes.")
+            
+            # Tabla interactiva profesional
+            st.dataframe(df_filtrado, use_container_width=True)
+            
+            # Botón para descargar lo que filtraste
+            csv = df_filtrado.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📥 Descargar esta búsqueda en Excel", csv, "busqueda_euro.csv", "text/csv")
+
+        except:
+            st.warning("Aún no hay datos en la nube o el link de lectura no es correcto.")
+    else:
+        st.error("Introduce la clave para ver el historial.")

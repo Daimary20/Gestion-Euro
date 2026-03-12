@@ -2,95 +2,82 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+from PIL import Image
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="EURO Control", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="EURO Control Pro", layout="wide")
 
-# Nombre del archivo de base de datos local
 DB_FILE = "base_datos_trabajos.csv"
+FOTOS_DIR = "fotos"
 
-# --- MENÚ LATERAL ---
+# Crear carpeta de fotos si no existe (para uso local)
+if not os.path.exists(FOTOS_DIR):
+    os.makedirs(FOTOS_DIR)
+
+# --- MENÚ ---
 st.sidebar.title("🛠️ Sistema EURO")
-opcion = st.sidebar.radio("Ir a:", ["📝 Nuevo Reporte", "🔍 Buscador Avanzado"])
+opcion = st.sidebar.radio("Navegación:", ["📝 Nuevo Reporte", "🔍 Buscador con Fotos"])
 
-# --- OPCIÓN 1: FORMULARIO DE REPORTE ---
+# --- OPCIÓN 1: NUEVO REPORTE ---
 if opcion == "📝 Nuevo Reporte":
     st.header("📝 Registro de Actividad")
-    
     with st.form("form_registro", clear_on_submit=True):
         col1, col2 = st.columns(2)
-        tecnico = col1.text_input("👤 Nombre del Técnico")
-        area = col2.text_input("📍 Área / Ubicación del Trabajo")
+        tecnico = col1.text_input("👤 Técnico")
+        area = col2.text_input("📍 Área")
+        producto = st.text_input("📦 Equipo")
+        desc = st.text_area("📝 Descripción")
+        foto = st.file_uploader("📷 Foto (OBLIGATORIA)", type=["jpg", "png", "jpeg"])
         
-        producto = st.text_input("📦 Equipo / Máquina Intervenida")
-        
-        col3, col4 = st.columns(2)
-        fecha = col3.date_input("📅 Fecha", datetime.now())
-        hora = col4.time_input("🕒 Hora", datetime.now())
-        
-        desc = st.text_area("📝 Descripción de la labor realizada")
-        
-        # FOTO OBLIGATORIA
-        foto = st.file_uploader("📷 Adjuntar Fotografía del Trabajo (REQUERIDO)", type=["jpg", "png", "jpeg"])
-        
-        enviar = st.form_submit_button("REGISTRAR TRABAJO")
-        
-        if enviar:
-            # Validación estricta: Técnico, Producto y Foto deben existir
+        if st.form_submit_button("REGISTRAR TRABAJO"):
             if tecnico and producto and foto is not None:
+                # Guardar la imagen físicamente
+                nombre_foto = f"{tecnico}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                ruta_foto = os.path.join(FOTOS_DIR, nombre_foto)
+                img = Image.open(foto)
+                img.save(ruta_foto)
+                
                 datos = {
-                    "Fecha": fecha.strftime("%d/%m/%Y"),
-                    "Hora": hora.strftime("%H:%M"),
+                    "Fecha": datetime.now().strftime("%d/%m/%Y"),
+                    "Hora": datetime.now().strftime("%H:%M"),
                     "Técnico": tecnico,
                     "Área": area,
                     "Producto": producto,
                     "Descripción": desc,
-                    "Evidencia": "Foto Adjunta"
+                    "Archivo_Foto": nombre_foto # Guardamos el nombre del archivo
                 }
                 
-                # Guardado en CSV
                 df_nuevo = pd.DataFrame([datos])
                 df_nuevo.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False, encoding='utf-8-sig')
-                
-                st.success(f"✅ ¡Excelente! Reporte de {tecnico} guardado correctamente.")
-                st.balloons()
+                st.success("✅ Guardado con éxito y foto registrada.")
             else:
-                if foto is None:
-                    st.error("⚠️ NO SE PUEDE GUARDAR: Debes adjuntar obligatoriamente una imagen del trabajo.")
-                else:
-                    st.error("⚠️ Por favor, completa los campos de 'Técnico' y 'Equipo'.")
+                st.error("⚠️ Debes llenar Técnico, Equipo y adjuntar la FOTO.")
 
-# --- OPCIÓN 2: BUSCADOR AVANZADO ---
+# --- OPCIÓN 2: BUSCADOR CON FOTOS ---
 else:
-    st.header("🔍 Buscador Avanzado de Reportes")
-    
+    st.header("🔍 Buscador de Reportes con Evidencia")
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
+        busqueda = st.text_input("🔍 Buscar por técnico, área o equipo...")
         
-        # Campo de búsqueda global
-        st.subheader("Filtrar información")
-        busqueda = st.text_input("🔍 Busca por cualquier término (Ej: Nombre del técnico, una fecha, el área o el equipo)")
-        
-        # Filtro dinámico
         if busqueda:
-            # Busca la coincidencia en todas las celdas de la tabla
-            df_filtrado = df[df.astype(str).apply(lambda x: x.str.contains(busqueda, case=False)).any(axis=1)]
-        else:
-            df_filtrado = df
-
-        # Mostrar tabla interactiva
-        st.write(f"Mostrando **{len(df_filtrado)}** resultados encontrados.")
-        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+            df = df[df.astype(str).apply(lambda x: x.str.contains(busqueda, case=False)).any(axis=1)]
         
-        # Botón para exportar los resultados filtrados
-        csv = df_filtrado.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="📥 Descargar esta lista en Excel (CSV)",
-            data=csv,
-            file_name=f"reporte_euro_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-        )
-        
+        # MOSTRAR REPORTES CON IMAGEN
+        for index, row in df.iterrows():
+            with st.expander(f"📅 {row['Fecha']} - {row['Técnico']} - {row['Producto']}"):
+                col_text, col_img = st.columns([2, 1])
+                
+                with col_text:
+                    st.write(f"**📍 Área:** {row['Área']}")
+                    st.write(f"**📝 Descripción:** {row['Descripción']}")
+                    st.write(f"**🕒 Hora:** {row['Hora']}")
+                
+                with col_img:
+                    path_img = os.path.join(FOTOS_DIR, row['Archivo_Foto'])
+                    if os.path.exists(path_img):
+                        st.image(path_img, caption="Evidencia del trabajo", use_container_width=True)
+                    else:
+                        st.warning("Foto no encontrada en el servidor.")
     else:
-        st.info("Aún no existen reportes registrados en la base de datos.")
-        
+        st.info("No hay registros todavía.")

@@ -1,73 +1,77 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import requests
-import json
+import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="EURO Gestión Pro", layout="wide")
+st.set_page_config(page_title="EURO Control", layout="wide")
 
-# CONFIGURACIÓN DE ENLACES (Pega los tuyos aquí)
-URL_GOOGLE_SCRIPT = "https://gestion-euro-iebyhcq3f9vhb82ov7hhax.streamlit.app/~/+/LINK_DE_TU_HOJA_DE_CALCULO_AQUI#nuevo-reporte-de-actividad"
-URL_CSV_LECTURA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrL2GKdcGjFfPBsh-3nm-gshEqx_05OMloc3N1Q0s3yFQt8Qpq0uMTGvlb_2KwF0GGmPaVPOA3my_N/pub?output=csv"
+# Archivo donde se guardan los datos
+DB_FILE = "base_datos_trabajos.csv"
 
-st.sidebar.title("🛠️ Menú EURO")
-opcion = st.sidebar.radio("Ir a:", ["📝 Nuevo Reporte", "📊 Ver Historial / Buscar"])
+# --- MENÚ LATERAL ---
+st.sidebar.title("🛠️ Sistema EURO")
+opcion = st.sidebar.radio("Selecciona una opción:", ["📝 Nuevo Reporte", "📊 Historial y Buscador"])
 
-# --- SECCIÓN 1: GUARDAR EN GOOGLE SHEETS ---
+# --- OPCIÓN 1: NUEVO REPORTE ---
 if opcion == "📝 Nuevo Reporte":
-    st.header("Registrar Nuevo Trabajo")
+    st.header("📝 Registro de Trabajo")
+    
     with st.form("form_registro", clear_on_submit=True):
         col1, col2 = st.columns(2)
-        emp = col1.text_input("Técnico")
-        area = col2.text_input("Área/Cliente")
-        prod = st.text_input("Equipo/Máquina")
-        desc = st.text_area("Descripción del trabajo")
+        tecnico = col1.text_input("👤 Técnico")
+        area = col2.text_input("📍 Área / Ubicación")
         
-        if st.form_submit_button("GUARDAR REPORTE"):
-            if emp and prod and area:
+        producto = st.text_input("📦 Equipo / Máquina")
+        
+        col3, col4 = st.columns(2)
+        fecha = col3.date_input("📅 Fecha", datetime.now())
+        hora = col4.time_input("🕒 Hora", datetime.now())
+        
+        desc = st.text_area("📝 Descripción detallada")
+        
+        enviar = st.form_submit_button("GUARDAR REPORTE")
+        
+        if enviar:
+            if tecnico and producto:
                 datos = {
-                    "fecha": datetime.now().strftime("%d/%m/%Y"),
-                    "hora": datetime.now().strftime("%H:%M"),
-                    "empleado": emp,
-                    "area": area,
-                    "producto": prod,
-                    "descripcion": desc,
-                    "foto_url": "Almacenado"
+                    "Fecha": fecha.strftime("%d/%m/%Y"),
+                    "Hora": hora.strftime("%H:%M"),
+                    "Técnico": tecnico,
+                    "Área": area,
+                    "Producto": producto,
+                    "Descripción": desc
                 }
-                # Envío a Google Sheets
-                requests.post(URL_GOOGLE_SCRIPT, data=json.dumps(datos))
-                st.success("✅ Guardado en Google Sheets correctamente.")
+                # Guardar en el archivo CSV local
+                df_nuevo = pd.DataFrame([datos])
+                df_nuevo.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False, encoding='utf-8-sig')
+                st.success("✅ Reporte guardado con éxito.")
+                st.balloons()
             else:
-                st.error("Por favor llena los campos obligatorios.")
+                st.error("⚠️ El nombre del Técnico y el Producto son obligatorios.")
 
-# --- SECCIÓN 2: VER REPORTES DESDE LA APP ---
+# --- OPCIÓN 2: HISTORIAL Y BUSCADOR ---
 else:
-    st.header("📊 Historial Completo de Reportes")
-    pw = st.sidebar.text_input("Contraseña Admin", type="password")
+    st.header("📊 Consulta de Historial")
     
-    if pw == "admin": # Puedes cambiar esta clave
-        try:
-            # La app lee los datos de Google Sheets
-            df = pd.read_csv(URL_CSV_LECTURA)
-            
-            # Buscador avanzado
-            busqueda = st.text_input("🔍 Buscar por cualquier palabra (Técnico, Área, Máquina...)")
-            
-            if busqueda:
-                # Filtra en todas las columnas
-                df = df[df.astype(str).apply(lambda x: x.str.contains(busqueda, case=False)).any(axis=1)]
-
-            # Muestra la tabla profesional
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            # Resumen rápido
-            st.info(f"Mostrando {len(df)} reportes encontrados.")
-            
-        except Exception as e:
-            st.warning("Aún no hay datos para mostrar o el enlace de publicación no es correcto.")
+    if os.path.exists(DB_FILE):
+        df = pd.read_csv(DB_FILE)
+        
+        # Filtros de búsqueda (Sin contraseña)
+        st.subheader("🔍 Buscador Inteligente")
+        busqueda = st.text_input("Escribe para buscar (Técnico, Área, Equipo o Fecha)...")
+        
+        # Lógica de filtrado en tiempo real
+        if busqueda:
+            # Busca la palabra en cualquier columna de la tabla
+            df = df[df.astype(str).apply(lambda x: x.str.contains(busqueda, case=False)).any(axis=1)]
+        
+        # Mostrar los resultados
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # Botón para descargar en Excel
+        csv = df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 Descargar Reporte (CSV)", csv, "reportes_euro.csv", "text/csv")
+        
     else:
-        st.info("Introduce la contraseña en el menú lateral para ver los reportes.")
-
-
-
+        st.info("Aún no hay reportes registrados.")

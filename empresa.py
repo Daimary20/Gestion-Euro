@@ -1,39 +1,63 @@
-
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import requests # Necesitaremos esta para enviar datos a Google
+import requests
+import json
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="EURO Gestión Cloud", layout="wide")
-ADMIN_PASSWORD = "admin" # Cambia tu clave aquí
+# --- CONFIGURACIÓN ESTÉTICA ---
+st.set_page_config(page_title="EURO Gestión Pro", layout="wide")
 
-# URL de tu Google App Script (la obtendrás en el paso anterior)
-GOOGLE_SCRIPT_URL = "AQUÍ_PEGARÁS_TU_LINK_DE_GOOGLE"
+# --- REEMPLAZA CON TU URL DE GOOGLE APPS SCRIPT ---
+URL_GOOGLE = "TU_URL_DE_APPS_SCRIPT_AQUI"
 
-st.sidebar.title("🛠️ EURO Control")
-opcion = st.sidebar.radio("Menú", ["📝 Reportar Trabajo", "📊 Panel de Control"])
+st.sidebar.title("🛠️ Menú EURO")
+opcion = st.sidebar.radio("Ir a:", ["📝 Reporte Diario", "📊 Panel Admin"])
 
-if opcion == "📝 Reportar Trabajo":
+if opcion == "📝 Reporte Diario":
     st.header("Nuevo Reporte de Actividad")
-    with st.form("form_registro"):
-        nombre = st.text_input("Técnico")
-        equipo = st.text_input("Máquina/Equipo")
-        desc = st.text_area("Descripción")
-        foto = st.file_uploader("Subir Foto", type=["jpg", "png"])
+    
+    with st.form("form_euro", clear_on_submit=True):
+        # Campos de identificación
+        col_tecnico, col_area = st.columns(2)
+        emp = col_tecnico.text_input("👤 Nombre del Técnico")
+        area = col_area.text_input("📍 Área de Trabajo (Ej: Cocina, Taller, Cliente X)")
         
-        if st.form_submit_button("ENVIAR A LA NUBE"):
-            if nombre and equipo and foto:
-                # Aquí el código enviará los datos a Google Sheets
-                st.success("✅ Reporte enviado y guardado en Google Sheets")
+        # Campo de equipo
+        prod = st.text_input("📦 Equipo / Máquina (Ej: Horno Blodgett)")
+        
+        # Campos de tiempo (Ahora editables)
+        col_fecha, col_hora = st.columns(2)
+        fec_manual = col_fecha.date_input("📅 Fecha del Trabajo", datetime.now())
+        hor_manual = col_hora.time_input("🕒 Hora del Trabajo", datetime.now())
+        
+        # Descripción y Foto
+        desc = st.text_area("📝 Detalles del Trabajo Realizado")
+        foto = st.file_uploader("📷 Subir Foto del Trabajo", type=["jpg", "png", "jpeg"])
+        
+        if st.form_submit_button("ENVIAR REPORTE A LA NUBE"):
+            if emp and prod and area:
+                # Preparamos los datos para Google Sheets
+                datos = {
+                    "fecha": fec_manual.strftime("%d/%m/%Y"),
+                    "hora": hor_manual.strftime("%H:%M"),
+                    "empleado": emp,
+                    "area": area, # Enviamos la nueva variable Area
+                    "producto": prod,
+                    "descripcion": desc,
+                    "foto_url": "Foto cargada" # Luego configuraremos la subida real de imagen
+                }
+                
+                try:
+                    requests.post(URL_GOOGLE, data=json.dumps(datos))
+                    st.success(f"✅ ¡Excelente! El reporte de {prod} en {area} ha sido guardado.")
+                    st.balloons()
+                except:
+                    st.error("❌ Error de conexión. Revisa el link de Google Script.")
             else:
-                st.error("Completa todos los campos")
+                st.warning("⚠️ Por favor llena Nombre, Área y Producto.")
 
-else:
-    # Lógica para ver el historial conectándose a la hoja de Google
+elif opcion == "📊 Panel Admin":
     st.header("Panel Administrativo")
-    pw = st.sidebar.text_input("Clave", type="password")
-    if pw == ADMIN_PASSWORD:
-        st.write("Conectando con la base de datos de Google...")
-        # Aquí leeremos la hoja de cálculo directamente
+    st.info("Desde aquí puedes acceder a tu base de datos central en Google.")
+    # Coloca aquí el link de tu hoja de Google Sheets
+    st.link_button("📂 Abrir Base de Datos (Excel)", "LINK_DE_TU_HOJA_DE_CALCULO_AQUI")

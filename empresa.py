@@ -7,7 +7,7 @@ import json
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="EURO Gestión Pro", layout="wide")
 
-# CONFIGURACIÓN DE ENLACES (Pega los tuyos aquí)
+# CONFIGURACIÓN DE ENLACES (Pega los tuyoshttps://docs.google.com/spreadsheets/d/e/2PACX-1vTrL2GKdcGjFfPBsh-3nm-gshEqx_05OMloc3N1Q0s3yFQt8Qpq0uMTGvlb_2KwF0GGmPaVPOA3my_N/pub?output=csv aquí)
 URL_GOOGLE_SCRIPT = "TU_URL_DE_APPS_SCRIPT_AQUI"
 URL_CSV_LECTURA = "TU_LINK_DE_PUBLICAR_EN_LA_WEB_CSV_AQUI"
 
@@ -68,3 +68,4 @@ else:
             st.warning("Aún no hay datos para mostrar o el enlace de publicación no es correcto.")
     else:
         st.info("Introduce la contraseña en el menú lateral para ver los reportes.")
+

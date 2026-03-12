@@ -5,7 +5,7 @@ from supabase import create_client, Client
 
 # --- 1. CONEXIÓN A SUPABASE ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co" 
-# PEGA TU LLAVE ABAJO (la que empieza por sb_publishable)
+# REEMPLAZA CON TU CLAVE sb_publishable REAL
 KEY_SUPABASE = "sb_publishable_h7zleHEMdqtAVnEbOjTDJA_fwt_HGNb"
 
 supabase: Client = create_client(URL_SUPABASE, KEY_SUPABASE)
@@ -21,7 +21,7 @@ if 'autenticado' not in st.session_state:
 # --- PANTALLA DE ACCESO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Sistema EURO Control")
-    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registrarse", "❓ Olvidé mis datos"])
+    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registrarse", "📧 Recuperar Acceso"])
     
     with tab1:
         with st.form("login_form"):
@@ -39,99 +39,43 @@ if not st.session_state['autenticado']:
     with tab2:
         st.subheader("Crear nueva cuenta de técnico")
         with st.form("reg_form"):
-            new_u = st.text_input("Escribe un Nombre de Usuario")
-            new_p = st.text_input("Crea una Contraseña", type="password")
-            confirm_p = st.text_input("Confirma la Contraseña", type="password")
-            if st.form_submit_button("REGISTRAR"):
-                if new_u and new_p == confirm_p:
+            new_u = st.text_input("Nombre de Usuario")
+            new_e = st.text_input("Correo Electrónico (Para recuperación)")
+            new_p = st.text_input("Contraseña Nueva", type="password")
+            confirm_p = st.text_input("Confirmar Contraseña", type="password")
+            if st.form_submit_button("REGISTRARME"):
+                if new_u and new_e and new_p == confirm_p:
                     try:
-                        supabase.table("usuarios").insert({"usuario": new_u, "clave": new_p}).execute()
-                        st.success("✅ Registro exitoso. Ahora puedes Iniciar Sesión.")
+                        # Guardamos también el correo en la base de datos
+                        supabase.table("usuarios").insert({
+                            "usuario": new_u, 
+                            "correo": new_e, 
+                            "clave": new_p
+                        }).execute()
+                        st.success("✅ Registro exitoso. Ya puedes Iniciar Sesión.")
                     except:
-                        st.error("❌ El usuario ya existe.")
+                        st.error("❌ El usuario ya existe o hubo un error de conexión.")
                 else:
-                    st.warning("⚠️ Las contraseñas no coinciden.")
+                    st.warning("⚠️ Revisa que todos los campos estén llenos y las contraseñas coincidan.")
 
     with tab3:
-        st.subheader("Recuperar Acceso")
-        st.info("Por seguridad, introduce tu nombre de usuario para ver tu clave.")
-        user_buscar = st.text_input("Introduce tu nombre de usuario")
-        if st.button("VER MI CONTRASEÑA"):
-            if user_buscar:
-                res = supabase.table("usuarios").select("clave").eq("usuario", user_buscar).execute()
+        st.subheader("Recuperar Usuario o Contraseña")
+        st.info("Introduce tu correo electrónico registrado para recuperar tus credenciales.")
+        email_buscar = st.text_input("Correo Electrónico")
+        if st.button("BUSCAR MIS DATOS"):
+            if email_buscar:
+                # Buscamos por correo electrónico
+                res = supabase.table("usuarios").select("usuario", "clave").eq("correo", email_buscar).execute()
                 if res.data:
-                    st.success(f"Tu contraseña es: **{res.data[0]['clave']}**")
+                    st.success("✅ Datos encontrados:")
+                    st.write(f"**Tu Usuario:** {res.data[0]['usuario']}")
+                    st.write(f"**Tu Contraseña:** {res.data[0]['clave']}")
                 else:
-                    st.error("El usuario no existe en la base de datos.")
+                    st.error("No se encontró ninguna cuenta asociada a ese correo.")
 
-# --- PANEL PRINCIPAL (YA DENTRO) ---
+# --- PANEL PRINCIPAL (DENTRO DEL SISTEMA) ---
 else:
     st.sidebar.title(f"👤 {st.session_state['usuario']}")
     opcion = st.sidebar.radio("Menú:", ["📝 Registrar Trabajo", "🔍 Buscador Avanzado", "🚪 Cerrar Sesión"])
 
-    if opcion == "🚪 Cerrar Sesión":
-        st.session_state['autenticado'] = False
-        st.rerun()
-
-    elif opcion == "📝 Registrar Trabajo":
-        st.header("📝 Nuevo Reporte de Actividad")
-        with st.form("form_trabajo", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            area = col1.text_input("📍 Área / Ubicación")
-            equipo = col2.text_input("📦 Equipo / Máquina")
-            
-            col3, col4 = st.columns(2)
-            fec = col3.date_input("📅 Fecha", datetime.now())
-            hor = col4.time_input("🕒 Hora", datetime.now())
-            
-            desc = st.text_area("📝 Descripción")
-            archivo = st.file_uploader("📷 Adjuntar Foto o Video", type=["jpg", "png", "jpeg", "mp4"])
-            
-            if st.form_submit_button("GUARDAR REPORTE"):
-                if equipo and archivo:
-                    file_ext = archivo.name.split(".")[-1]
-                    file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_ext}"
-                    
-                    # Subir a Storage
-                    supabase.storage.from_("evidencias").upload(file_name, archivo.getvalue())
-                    url_file = supabase.storage.from_("evidencias").get_public_url(file_name)
-                    
-                    # Guardar en Tabla
-                    datos = {
-                        "fecha": fec.strftime("%d/%m/%Y"),
-                        "hora": hor.strftime("%H:%M"),
-                        "tecnico": st.session_state['usuario'],
-                        "area": area,
-                        "equipo": equipo,
-                        "descripcion": desc,
-                        "url_multimedia": url_file
-                    }
-                    supabase.table("reportes_euro").insert(datos).execute()
-                    st.success("✅ Guardado correctamente.")
-                    st.balloons()
-                else:
-                    st.error("⚠️ Falta el equipo o el archivo.")
-
-    elif opcion == "🔍 Buscador Avanzado":
-        st.header("🔍 Historial Cloud")
-        res = supabase.table("reportes_euro").select("*").execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            busqueda = st.text_input("🔍 Buscar por área, equipo o técnico...")
-            if busqueda:
-                df = df[df.astype(str).apply(lambda x: x.str.contains(busqueda, case=False)).any(axis=1)]
-            
-            for _, row in df.iloc[::-1].iterrows():
-                with st.expander(f"📋 {row['fecha']} | {row['tecnico']} | {row['equipo']}"):
-                    c1, c2 = st.columns([2, 1])
-                    with c1:
-                        st.write(f"**🕒 Hora:** {row['hora']}")
-                        st.write(f"**📍 Área:** {row['area']}")
-                        st.write(f"**📝 Descripción:** {row['descripcion']}")
-                    with c2:
-                        url = row['url_multimedia']
-                        if url.lower().endswith('.mp4'):
-                            st.video(url)
-                        else:
-                            st.image(url, use_container_width=True)
-
+    if opcion == "🚪 Cerr

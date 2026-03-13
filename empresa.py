@@ -3,14 +3,15 @@ import pandas as pd
 from datetime import datetime
 from supabase import create_client, Client
 
-# --- CONEXIÓN ---
+# --- CONEXIÓN (Se recomienda usar st.secrets para producción) ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co" 
-KEY_SUPABASE = "sb_publishable_h7zleHEMdqtAvnEbOjTDJA_fwt_HId_I0u9Xf9m9n0-Qy9V8g7rX-E_h-YJ_H0_jL"
+KEY_SUPABASE = "TU_API_KEY_AQUÍ" # Reemplaza con tu clave real
 
 supabase: Client = create_client(URL_SUPABASE, KEY_SUPABASE)
 
-st.set_page_config(page_title="EURO Gestión Cloud", layout="wide")
+st.set_page_config(page_title="EURO Gestión Cloud", layout="wide", page_icon="🏗️")
 
+# Inicialización de estado de sesión
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
@@ -29,8 +30,10 @@ if not st.session_state['autenticado']:
                     st.session_state['autenticado'] = True
                     st.session_state['usuario'] = u
                     st.rerun()
-                else: st.error("Usuario o clave incorrectos")
-            except: st.error("Error de conexión. Revisa el SQL en Supabase.")
+                else: 
+                    st.error("Usuario o clave incorrectos")
+            except Exception as e: 
+                st.error(f"Error de conexión: {e}")
 
     with t2:
         nu = st.text_input("Nuevo Usuario")
@@ -40,55 +43,84 @@ if not st.session_state['autenticado']:
             try:
                 supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
                 st.success("✅ Registro exitoso. Ve a la pestaña Login.")
-            except: st.error("⚠️ Error: Ejecuta el código SQL en Supabase primero.")
+            except: 
+                st.error("⚠️ Error: El usuario/correo ya existe o falta configurar SQL.")
 
     with t3:
         em = st.text_input("Introduce tu correo")
         if st.button("Recuperar"):
             try:
-                res = supabase.table("usuarios").select("*").eq("correo", em).execute()
+                res = supabase.table("usuarios").select("usuario, clave").eq("correo", em).execute()
                 if res.data:
                     st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
-                else: st.error("Correo no encontrado")
-            except: st.error("Error al buscar. Revisa las tablas.")
+                else: 
+                    st.error("Correo no encontrado")
+            except: 
+                st.error("Error al buscar en la base de datos.")
 
 else:
     # --- APP PRINCIPAL ---
-    st.sidebar.write(f"Sesión: {st.session_state['usuario']}")
+    st.sidebar.title(f"Bienvenido")
+    st.sidebar.write(f"👤 {st.session_state['usuario']}")
+    
+    menu = st.sidebar.radio("Navegación:", ["Registrar Reporte", "Historial de Reportes"])
+    
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state['autenticado'] = False
         st.rerun()
 
-    menu = st.sidebar.radio("Ir a:", ["Registrar", "Historial"])
-
-    if menu == "Registrar":
-        with st.form("registro"):
-            eq = st.text_input("Equipo")
-            ar = st.text_input("Área")
-            de = st.text_area("Descripción")
-            f = st.file_uploader("Evidencia", type=["jpg","png","mp4"])
-            if st.form_submit_button("Guardar"):
+    if menu == "Registrar Reporte":
+        st.header("📝 Nuevo Reporte Técnico")
+        with st.form("registro", clear_on_submit=True):
+            eq = st.text_input("Equipo / Maquinaria")
+            ar = st.text_input("Área de Trabajo")
+            de = st.text_area("Descripción de la novedad")
+            f = st.file_uploader("Subir Evidencia (Imagen o Video)", type=["jpg","png","jpeg","mp4"])
+            
+            enviar = st.form_submit_button("Guardar Reporte")
+            
+            if enviar:
                 if eq and f:
                     try:
-                        fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
+                        # 1. Subir archivo al Storage
+                        fname = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{f.name}"
                         supabase.storage.from_("evidencias").upload(fname, f.getvalue())
+                        
+                        # 2. Obtener URL pública
                         url = supabase.storage.from_("evidencias").get_public_url(fname)
+                        
+                        # 3. Guardar en base de datos
                         supabase.table("reportes_euro").insert({
-                            "fecha": datetime.now().strftime("%d/%m/%Y"),
+                            "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
                             "tecnico": st.session_state['usuario'],
-                            "area": ar, "equipo": eq, "descripcion": de, "url_multimedia": url
+                            "area": ar, 
+                            "equipo": eq, 
+                            "descripcion": de, 
+                            "url_multimedia": url
                         }).execute()
-                        st.success("✅ Guardado")
-                    except: st.error("Error al guardar. ¿Creaste el bucket 'evidencias'?")
-                else: st.error("Faltan datos")
+                        st.success("✅ Reporte guardado exitosamente.")
+                    except Exception as e: 
+                        st.error(f"Error al guardar: {e}")
+                else: 
+                    st.warning("El nombre del equipo y la evidencia son obligatorios.")
 
     if menu == "Historial":
+        st.header("📋 Historial de Reportes")
         try:
-            res = supabase.table("reportes_euro").select("*").execute()
-            for r in res.data[::-1]:
-                with st.expander(f"{r['fecha']} - {r['equipo']}"):
-                    st.write(f"Técnico: {r['tecnico']} | Área: {r['area']}")
-                    st.write(r['descripcion'])
-                    if r['url_multimedia'].endswith('.mp4'): st.video(r['url_multimedia'])
-                    else: st.image(r['url_multimedia'])
-        except: st.warning("No hay reportes aún.")
+            res = supabase.table("reportes_euro").select("*").order("creado_at", desc=True).execute()
+            if not res.data:
+                st.info("No hay reportes registrados.")
+            
+            for r in res.data:
+                with st.expander(f"📅 {r['fecha']} - ⚙️ {r['equipo']}"):
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        st.write(f"**Técnico:** {r['tecnico']}")
+                        st.write(f"**Área:** {r['area']}")
+                        st.write(f"**Descripción:** {r['descripcion']}")
+                    with col2:
+                        if r['url_multimedia']:
+                            if r['url_multimedia'].lower().endswith('.mp4'):
+                                st.video(r['url_multimedia'])
+                            else:
+                                st.image(r['url_multimedia'], use

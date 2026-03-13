@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
 from supabase import create_client, Client
+from fpdf import FPDF # Asegúrate de instalarlo con pip install fpdf
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co"
@@ -15,6 +16,36 @@ st.set_page_config(page_title="EURO Gestión Cloud", layout="wide", page_icon="�
 
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
+
+# --- FUNCIÓN PARA GENERAR PDF ---
+def generar_pdf(lista_reportes):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(190, 10, "EURO GESTION CLOUD - REPORTE DE TRABAJOS", ln=True, align="C")
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(190, 10, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.ln(10)
+
+    # Cabecera de tabla
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_fill_color(200, 200, 200)
+    pdf.cell(35, 8, "Fecha", 1, 0, "C", True)
+    pdf.cell(40, 8, "Equipo", 1, 0, "C", True)
+    pdf.cell(40, 8, "Tecnico", 1, 0, "C", True)
+    pdf.cell(75, 8, "Detalles", 1, 1, "C", True)
+
+    # Contenido
+    pdf.set_font("Arial", "", 9)
+    for r in lista_reportes:
+        # Limitar texto de descripción para que no se salga de la celda
+        desc = (r['descripcion'][:45] + '..') if len(r['descripcion']) > 45 else r['descripcion']
+        pdf.cell(35, 8, str(r['fecha']), 1)
+        pdf.cell(40, 8, str(r['equipo']), 1)
+        pdf.cell(40, 8, str(r['tecnico']), 1)
+        pdf.cell(75, 8, desc, 1, 1)
+    
+    return pdf.output(dest='S').encode('latin-1')
 
 # --- 2. LÓGICA DE ACCESO ---
 if not st.session_state['autenticado']:
@@ -71,7 +102,6 @@ else:
 
     menu = st.sidebar.radio("Ir a:", ["➕ Registrar Trabajo", "📋 Historial de Trabajos"])
 
-    # --- REGISTRAR TRABAJO ---
     if menu == "➕ Registrar Trabajo":
         st.header("📝 Registro de Trabajo Realizado")
         fecha_now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -104,19 +134,16 @@ else:
                 else:
                     st.warning("Faltan datos obligatorios")
 
-    # --- HISTORIAL ---
     if menu == "📋 Historial de Trabajos":
         st.header("📋 Historial de Trabajos")
         
-        # BUSCADOR ÚNICO
-        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo o Fecha", placeholder="Ej: Juan, Bodega, Excavadora...")
+        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo o Fecha")
 
         try:
             res_h = supabase.table("reportes_euro").select("*").execute()
             if res_h.data:
                 datos = res_h.data[::-1]
 
-                # Filtrado inteligente
                 if busqueda:
                     b = busqueda.lower()
                     datos = [r for r in datos if 
@@ -124,6 +151,16 @@ else:
                              b in r['area'].lower() or 
                              b in (r['equipo'].lower() if r['equipo'] else "") or
                              b in r['fecha'].lower()]
+
+                # BOTÓN PDF
+                if datos:
+                    pdf_data = generar_pdf(datos)
+                    st.download_button(
+                        label="📥 Descargar Reporte PDF",
+                        data=pdf_data,
+                        file_name=f"reporte_euro_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf"
+                    )
 
                 st.write(f"Resultados: **{len(datos)}**")
                 
@@ -137,18 +174,4 @@ else:
                                 if r['url_multimedia']:
                                     nombre = r['url_multimedia'].split("/")[-1]
                                     supabase.storage.from_("evidencias").remove([nombre])
-                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
-                                st.rerun()
-                            except:
-                                st.error("No se pudo borrar")
-
-                        if r['url_multimedia']:
-                            url = r['url_multimedia']
-                            if any(x in url.lower() for x in ['.mp4', '.mov']):
-                                st.video(url)
-                            else:
-                                st.image(url, use_container_width=True)
-            else:
-                st.info("Sin registros")
-        except Exception as e:
-            st.error(f"Error: {e}")
+                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute

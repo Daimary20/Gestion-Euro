@@ -17,7 +17,7 @@ if 'autenticado' not in st.session_state:
 # --- LÓGICA DE ACCESO (LOGIN / REGISTRO) ---
 if not st.session_state['autenticado']:
     st.title("🏗️ EURO Control")
-    tab_login, tab_reg = st.tabs(["🔐 Iniciar Sesión", "📝 Registro de Usuario"])
+    tab_login, tab_reg = st.tabs(["🔐 Iniciar Sesión", "📝 Registro"])
     
     with tab_login:
         u = st.text_input("Usuario", key="login_u")
@@ -48,9 +48,8 @@ if not st.session_state['autenticado']:
 else:
     # --- APP PRINCIPAL (SESIÓN INICIADA) ---
     st.sidebar.title("Menú Principal")
-    st.sidebar.write(f"👤 Bienvenido: **{st.session_state['usuario']}**")
+    st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
     
-    # OPCIÓN PARA CERRAR SESIÓN
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
         st.rerun()
@@ -59,8 +58,6 @@ else:
 
     if menu == "➕ Registrar Reporte":
         st.header("📝 Nuevo Reporte de Incidencia")
-        
-        # FECHA Y HORA AUTOMÁTICA
         fecha_auto = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         st.info(f"📅 **Fecha del Reporte:** {fecha_auto}")
 
@@ -68,53 +65,21 @@ else:
             eq = st.text_input("Equipo / Maquinaria")
             ar = st.text_input("Área de Trabajo")
             de = st.text_area("Descripción de la novedad")
-            
-            # Soporte para imágenes y videos
             f = st.file_uploader("Evidencia (Foto o Video)", type=["jpg","png","jpeg","mp4","mov"])
             
             if st.form_submit_button("Guardar Reporte"):
                 if eq and f:
                     try:
-                        # 1. Subir al Storage (Bucket: evidencias)
+                        # 1. Subir al Storage
                         fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
                         supabase.storage.from_("evidencias").upload(fname, f.getvalue())
-                        
-                        # 2. URL del archivo
                         url = supabase.storage.from_("evidencias").get_public_url(fname)
                         
-                        # 3. Guardar datos en tabla reportes_euro
+                        # 2. Guardar datos
                         supabase.table("reportes_euro").insert({
                             "fecha": fecha_auto,
                             "tecnico": st.session_state['usuario'],
                             "area": ar, 
                             "equipo": eq, 
                             "descripcion": de, 
-                            "url_multimedia": url
-                        }).execute()
-                        st.success("✅ Reporte enviado correctamente")
-                    except Exception as e: 
-                        st.error(f"❌ Fallo al guardar: {e}")
-                else: 
-                    st.warning("Debes completar el nombre del equipo y subir una evidencia.")
-
-    if menu == "📋 Ver Historial":
-        st.header("📋 Historial de Reportes")
-        try:
-            res = supabase.table("reportes_euro").select("*").execute()
-            if res.data:
-                for r in res.data[::-1]: # Mostrar los más nuevos arriba
-                    with st.expander(f"📅 {r['fecha']} - ⚙️ {r['equipo']}"):
-                        st.write(f"**Técnico:** {r['tecnico']} | **Área:** {r['area']}")
-                        st.write(f"**Descripción:** {r['descripcion']}")
-                        
-                        url = r['url_multimedia']
-                        if url:
-                            # REPRODUCTOR INTELIGENTE (Video o Imagen)
-                            if any(ext in url.lower() for ext in ['.mp4', '.mov']):
-                                st.video(url)
-                            else:
-                                st.image(url, use_container_width=True)
-            else:
-                st.info("No hay reportes registrados.")
-        except Exception as e: 
-            st.error(f"Error al cargar historial: {e}")
+                            "url_mult

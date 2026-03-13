@@ -14,10 +14,10 @@ st.set_page_config(page_title="EURO Gestión Cloud", layout="wide", page_icon="�
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
-# --- LÓGICA DE ACCESO (LOGIN / REGISTRO) ---
+# --- LÓGICA DE ACCESO (LOGIN / REGISTRO / RECUPERAR) ---
 if not st.session_state['autenticado']:
     st.title("🏗️ EURO Control")
-    tab_login, tab_reg = st.tabs(["🔐 Iniciar Sesión", "📝 Registro"])
+    tab_login, tab_reg, tab_rec = st.tabs(["🔐 Iniciar Sesión", "📝 Registro", "📧 Recuperar"])
     
     with tab_login:
         u = st.text_input("Usuario", key="login_u")
@@ -45,8 +45,23 @@ if not st.session_state['autenticado']:
             except Exception as e:
                 st.error(f"⚠️ Error al registrar: {e}")
 
+    with tab_rec:
+        st.subheader("Recuperar Credenciales")
+        email_busca = st.text_input("Introduce tu correo electrónico registrado")
+        if st.button("Consultar Clave"):
+            try:
+                res = supabase.table("usuarios").select("*").eq("correo", email_busca).execute()
+                if res.data:
+                    info = res.data[0]
+                    st.info(f"🔑 Tu usuario es: **{info['usuario']}**")
+                    st.info(f"🔓 Tu clave es: **{info['clave']}**")
+                else:
+                    st.warning("Ese correo no está registrado en el sistema.")
+            except Exception as e:
+                st.error(f"Error al consultar: {e}")
+
 else:
-    # --- APP PRINCIPAL ---
+    # --- APP PRINCIPAL (SESIÓN INICIADA) ---
     st.sidebar.title("Menú Principal")
     st.sidebar.write(f"👤 Bienvenido: **{st.session_state['usuario']}**")
     
@@ -71,12 +86,10 @@ else:
             if st.form_submit_button("Guardar Reporte"):
                 if eq and f:
                     try:
-                        # 1. Subir al Storage (Bucket: evidencias)
                         fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
                         supabase.storage.from_("evidencias").upload(fname, f.getvalue())
                         url = supabase.storage.from_("evidencias").get_public_url(fname)
                         
-                        # 2. Guardar en Base de Datos
                         supabase.table("reportes_euro").insert({
                             "fecha": fecha_auto,
                             "tecnico": st.session_state['usuario'],
@@ -89,9 +102,9 @@ else:
                     except Exception as e:
                         st.error(f"❌ Error: {e}")
                 else:
-                    st.warning("Completa los campos obligatorios.")
+                    st.warning("Completa los campos obligatorios y sube un archivo.")
 
-    # --- MÓDULO: HISTORIAL CON BORRADO ---
+    # --- MÓDULO: HISTORIAL ---
     if menu == "📋 Ver Historial":
         st.header("📋 Historial de Reportes")
         try:
@@ -106,21 +119,17 @@ else:
                             st.write(f"**Descripción:** {r['descripcion']}")
                         
                         with col_del:
-                            # BOTÓN DE ELIMINAR
                             if st.button("🗑️ Borrar", key=f"btn_{r['id']}"):
-                                # A. Borrar archivo del Storage
-                                if r['url_multimedia']:
-                                    try:
+                                try:
+                                    if r['url_multimedia']:
                                         nombre_archivo = r['url_multimedia'].split("/")[-1]
                                         supabase.storage.from_("evidencias").remove([nombre_archivo])
-                                    except: pass # Si el archivo ya no existe, ignorar
-                                
-                                # B. Borrar registro de la tabla
-                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
-                                st.success("Eliminado")
-                                st.rerun()
+                                    supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                                    st.success("Eliminado")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error al borrar: {e}")
 
-                        # VISUALIZACIÓN MULTIMEDIA
                         url = r['url_multimedia']
                         if url:
                             if any(ext in url.lower() for ext in ['.mp4', '.mov']):

@@ -174,4 +174,18 @@ else:
                                 if r['url_multimedia']:
                                     nombre = r['url_multimedia'].split("/")[-1]
                                     supabase.storage.from_("evidencias").remove([nombre])
-                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute
+                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                                st.rerun()
+                            except:
+                                st.error("No se pudo borrar")
+
+                        if r['url_multimedia']:
+                            url = r['url_multimedia']
+                            if any(x in url.lower() for x in ['.mp4', '.mov']):
+                                st.video(url)
+                            else:
+                                st.image(url, use_container_width=True)
+            else:
+                st.info("Sin registros")
+        except Exception as e:
+            st.error(f"Error: {e}")

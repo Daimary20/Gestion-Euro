@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 from supabase import create_client, Client
 from fpdf import FPDF
-import extra_streamlit_components as stx  # Librería para Cookies
+import extra_streamlit_components as stx
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co"
@@ -15,15 +15,15 @@ supabase = st.session_state.supabase
 
 st.set_page_config(page_title="EURO Gestión Cloud", layout="wide", page_icon="🏗️")
 
-# --- GESTIÓN DE COOKIES (SESIÓN PERSISTENTE) ---
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
+# --- GESTIÓN DE SESIÓN PERSISTENTE ---
+# Inicializamos el gestor de cookies fuera de funciones de caché para evitar el error de la imagen
+cookie_manager = stx.CookieManager()
 
-cookie_manager = get_cookie_manager()
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
 
-# Intentar recuperar sesión guardada si no está autenticado en el session_state
-if 'autenticado' not in st.session_state or not st.session_state['autenticado']:
+# Intentar recuperar sesión de la cookie
+if not st.session_state['autenticado']:
     user_saved = cookie_manager.get(cookie="euro_user_session")
     if user_saved:
         st.session_state['autenticado'] = True
@@ -53,7 +53,7 @@ def generar_pdf(lista_reportes):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # --- 2. LÓGICA DE ACCESO ---
-if not st.session_state.get('autenticado'):
+if not st.session_state['autenticado']:
     st.title("🏗️ EURO Control")
     tab1, tab2, tab3 = st.tabs(["🔐 Entrar", "📝 Registro", "📧 Recuperar"])
     
@@ -69,13 +69,12 @@ if not st.session_state.get('autenticado'):
                     st.session_state['autenticado'] = True
                     st.session_state['usuario'] = u
                     if recordar:
-                        # Guarda la cookie por 30 días
-                        cookie_manager.set("euro_user_session", u, expires_at=datetime.now().replace(year=datetime.now().year + 1))
+                        cookie_manager.set("euro_user_session", u, key="set_cookie")
                     st.rerun()
                 else:
                     st.error("Credenciales incorrectas")
             except Exception as e:
-                st.error(f"Error conexión: {e}")
+                st.error(f"Error: {e}")
 
     with tab2:
         nu = st.text_input("Nuevo Usuario", key="u_reg")
@@ -85,16 +84,20 @@ if not st.session_state.get('autenticado'):
             try:
                 supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
                 st.success("Cuenta creada")
-            except: st.error("Error al registrar")
+            except Exception as e:
+                st.error("Error al registrar")
 
     with tab3:
-        email_b = st.text_input("Tu correo registrado", key="e_rec")
+        email_b = st.text_input("Correo registrado", key="e_rec")
         if st.button("Recuperar"):
             try:
                 res = supabase.table("usuarios").select("*").eq("correo", email_b).execute()
-                if res.data: st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
-                else: st.warning("No encontrado")
-            except: st.error("Error consulta")
+                if res.data:
+                    st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
+                else:
+                    st.warning("No encontrado")
+            except Exception as e:
+                st.error("Error consulta")
 
 else:
     # --- 3. APP PRINCIPAL ---
@@ -102,7 +105,7 @@ else:
     st.sidebar.write(f"👤 {st.session_state['usuario']}")
     
     if st.sidebar.button("🚪 Cerrar Sesión"):
-        cookie_manager.delete("euro_user_session") # Borra la cookie al salir manual
+        cookie_manager.delete("euro_user_session")
         st.session_state['autenticado'] = False
         st.rerun()
 
@@ -127,8 +130,10 @@ else:
                             "area": ar, "equipo": eq, "descripcion": de, "url_multimedia": url
                         }).execute()
                         st.success("Trabajo guardado")
-                    except: st.error("Error al guardar")
-                else: st.warning("Equipo y Evidencia son obligatorios")
+                    except Exception as e:
+                        st.error("Error al guardar")
+                else:
+                    st.warning("Equipo y Evidencia son obligatorios")
 
     if menu == "📋 Historial":
         st.header("📋 Historial de Trabajos")
@@ -154,7 +159,12 @@ else:
                             if ".mp4" in url.lower() or ".mov" in url.lower(): st.video(url)
                             else: st.image(url, use_container_width=True)
                         if st.button("Eliminar", key=f"d_{r['id']}"):
-                            supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
-                            st.rerun()
-            else: st.info("No hay datos")
-        except: st.error("Error al cargar datos")
+                            try:
+                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                                st.rerun()
+                            except:
+                                st.error("Error al borrar")
+            else:
+                st.info("No hay datos")
+        except Exception as e:
+            st.error("Error al cargar datos")

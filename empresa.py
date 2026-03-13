@@ -58,35 +58,4 @@ if not st.session_state['autenticado']:
                     st.info(f"🔑 Tu usuario es: **{info['usuario']}**")
                     st.info(f"🔓 Tu clave es: **{info['clave']}**")
                 else:
-                    st.warning("Ese correo no está registrado en el sistema.")
-            except Exception as e:
-                st.error(f"Error al consultar: {e}")
-
-else:
-    # --- 3. APP PRINCIPAL ---
-    st.sidebar.title("Menú Principal")
-    st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
-    
-    if st.sidebar.button("🚪 Cerrar Sesión"):
-        st.session_state['autenticado'] = False
-        st.rerun()
-
-    menu = st.sidebar.radio("Navegación:", ["➕ Registrar Trabajo", "📋 Historial de Trabajos"])
-
-    # --- MÓDULO: REGISTRAR TRABAJO ---
-    if menu == "➕ Registrar Trabajo":
-        st.header("📝 Registro de Trabajo Realizado")
-        fecha_auto = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        st.info(f"📅 **Fecha de finalización:** {fecha_auto}")
-
-        with st.form("registro_form", clear_on_submit=True):
-            eq = st.text_input("Equipo / Maquinaria Reparada")
-            ar = st.text_input("Área / Ubicación")
-            de = st.text_area("Detalles de la reparación o mantenimiento")
-            f = st.file_uploader("Evidencia del trabajo (Foto o Video)", type=["jpg","png","jpeg","mp4","mov"])
-            
-            if st.form_submit_button("Guardar Registro de Trabajo"):
-                if eq and f:
-                    try:
-                        fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
-                        supabase.storage.from_("evidencias").upload(fname, f.getvalue())
+                    st.warning("Ese correo no está registrado en el sistema

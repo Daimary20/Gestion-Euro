@@ -109,28 +109,15 @@ else:
         st.header("📋 Historial de Reportes")
         
         with st.expander("🔍 Buscadores y Filtros", expanded=True):
-            col1, col2, col3 = st.columns(3)
-            with col1:
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1:
                 f_tecnico = st.text_input("Filtrar por Técnico")
-            with col2:
+            with c_f2:
                 f_area = st.text_input("Filtrar por Área")
-            with col3:
+            with c_f3:
                 f_fecha = st.text_input("Filtrar por Fecha")
 
         try:
-            res = supabase.table("reportes_euro").select("*").execute()
-            if res.data:
-                reportes = res.data[::-1]
-
-                if f_tecnico:
-                    reportes = [r for r in reportes if f_tecnico.lower() in r['tecnico'].lower()]
-                if f_area:
-                    reportes = [r for r in reportes if f_area.lower() in r['area'].lower()]
-                if f_fecha:
-                    reportes = [r for r in reportes if f_fecha in r['fecha']]
-
-                st.write(f"Resultados: **{len(reportes)}**")
-                
-                for r in reportes:
-                    with st.expander(f"📅 {r['fecha']} - ⚙️ {r['equipo']}"):
-                        c
+            res_h = supabase.table("reportes_euro").select("*").execute()
+            if res_h.data:
+                reportes = res_h.data[::-1]

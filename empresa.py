@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
 from supabase import create_client, Client
-from fpdf import FPDF # Asegúrate de instalarlo con pip install fpdf
+from fpdf import FPDF
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co"
@@ -17,45 +17,48 @@ st.set_page_config(page_title="EURO Gestión Cloud", layout="wide", page_icon="�
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
-# --- FUNCIÓN PARA GENERAR PDF ---
+# --- FUNCIÓN GENERAR PDF ---
 def generar_pdf(lista_reportes):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, "EURO GESTION CLOUD - REPORTE DE TRABAJOS", ln=True, align="C")
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(190, 10, "EURO GESTION - REPORTE DE TRABAJOS", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 10, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
-    pdf.ln(10)
+    pdf.cell(190, 10, f"Generado el: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align="C")
+    pdf.ln(5)
 
-    # Cabecera de tabla
+    # Encabezados
     pdf.set_font("Arial", "B", 10)
-    pdf.set_fill_color(200, 200, 200)
-    pdf.cell(35, 8, "Fecha", 1, 0, "C", True)
-    pdf.cell(40, 8, "Equipo", 1, 0, "C", True)
-    pdf.cell(40, 8, "Tecnico", 1, 0, "C", True)
-    pdf.cell(75, 8, "Detalles", 1, 1, "C", True)
+    pdf.set_fill_color(230, 230, 230)
+    pdf.cell(35, 8, "Fecha", 1, 0, "L", True)
+    pdf.cell(45, 8, "Equipo", 1, 0, "L", True)
+    pdf.cell(40, 8, "Tecnico", 1, 0, "L", True)
+    pdf.cell(70, 8, "Detalles", 1, 1, "L", True)
 
-    # Contenido
+    # Datos
     pdf.set_font("Arial", "", 9)
     for r in lista_reportes:
-        # Limitar texto de descripción para que no se salga de la celda
-        desc = (r['descripcion'][:45] + '..') if len(r['descripcion']) > 45 else r['descripcion']
-        pdf.cell(35, 8, str(r['fecha']), 1)
-        pdf.cell(40, 8, str(r['equipo']), 1)
-        pdf.cell(40, 8, str(r['tecnico']), 1)
-        pdf.cell(75, 8, desc, 1, 1)
+        fecha_str = str(r.get('fecha', ''))[:10]
+        equipo_str = str(r.get('equipo', ''))[:20]
+        tecnico_str = str(r.get('tecnico', ''))[:15]
+        desc_str = str(r.get('descripcion', ''))[:40]
+        
+        pdf.cell(35, 8, fecha_str, 1)
+        pdf.cell(45, 8, equipo_str, 1)
+        pdf.cell(40, 8, tecnico_str, 1)
+        pdf.cell(70, 8, desc_str, 1, 1)
     
-    return pdf.output(dest='S').encode('latin-1')
+    return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # --- 2. LÓGICA DE ACCESO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ EURO Control")
-    tab_login, tab_reg, tab_rec = st.tabs(["🔐 Iniciar Sesión", "📝 Registro", "📧 Recuperar"])
+    tab1, tab2, tab3 = st.tabs(["🔐 Entrar", "📝 Registro", "📧 Recuperar"])
     
-    with tab_login:
-        u = st.text_input("Usuario", key="login_u").strip()
-        p = st.text_input("Clave", type="password", key="login_p").strip()
-        if st.button("Entrar"):
+    with tab1:
+        u = st.text_input("Usuario", key="u_login").strip()
+        p = st.text_input("Clave", type="password", key="p_login").strip()
+        if st.button("Iniciar Sesión"):
             try:
                 res = supabase.table("usuarios").select("*").eq("usuario", u).eq("clave", p).execute()
                 if res.data:
@@ -63,129 +66,107 @@ if not st.session_state['autenticado']:
                     st.session_state['usuario'] = u
                     st.rerun()
                 else:
-                    st.error("Usuario o clave incorrectos")
+                    st.error("Credenciales incorrectas")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error conexión: {e}")
 
-    with tab_reg:
-        nu = st.text_input("Nuevo Usuario")
-        ne = st.text_input("Correo Electrónico")
-        np = st.text_input("Contraseña", type="password")
+    with tab2:
+        nu = st.text_input("Nuevo Usuario", key="u_reg")
+        ne = st.text_input("Correo", key="e_reg")
+        np = st.text_input("Contraseña", type="password", key="p_reg")
         if st.button("Crear Cuenta"):
             try:
                 supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
-                st.success("✅ Registro exitoso")
+                st.success("Cuenta creada")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error("Error al registrar")
 
-    with tab_rec:
-        email_busca = st.text_input("Correo electrónico registrado")
-        if st.button("Consultar Clave"):
+    with tab3:
+        email_b = st.text_input("Tu correo registrado", key="e_rec")
+        if st.button("Recuperar"):
             try:
-                res = supabase.table("usuarios").select("*").eq("correo", email_busca).execute()
+                res = supabase.table("usuarios").select("*").eq("correo", email_b).execute()
                 if res.data:
-                    info = res.data[0]
-                    st.info(f"Usuario: {info['usuario']} | Clave: {info['clave']}")
+                    st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
                 else:
-                    st.warning("Correo no encontrado")
+                    st.warning("No encontrado")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error("Error consulta")
 
 else:
     # --- 3. APP PRINCIPAL ---
-    st.sidebar.title("Menú Principal")
-    st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
-    
-    if st.sidebar.button("🚪 Cerrar Sesión"):
+    st.sidebar.title("EURO Control")
+    st.sidebar.write(f"👤 {st.session_state['usuario']}")
+    if st.sidebar.button("Cerrar Sesión"):
         st.session_state['autenticado'] = False
         st.rerun()
 
-    menu = st.sidebar.radio("Ir a:", ["➕ Registrar Trabajo", "📋 Historial de Trabajos"])
+    menu = st.sidebar.radio("Menú", ["➕ Registrar Trabajo", "📋 Historial"])
 
     if menu == "➕ Registrar Trabajo":
-        st.header("📝 Registro de Trabajo Realizado")
-        fecha_now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        st.info(f"📅 Fecha: {fecha_now}")
+        st.header("📝 Nuevo Registro de Trabajo")
+        f_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+        st.write(f"📅 Fecha: {f_actual}")
 
-        with st.form("form_trabajo", clear_on_submit=True):
-            eq = st.text_input("Equipo / Maquinaria")
-            ar = st.text_input("Área / Ubicación")
-            de = st.text_area("Detalles del trabajo")
+        with st.form("f_trabajo", clear_on_submit=True):
+            eq = st.text_input("Equipo")
+            ar = st.text_input("Área")
+            de = st.text_area("Detalles")
             f = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
             
-            if st.form_submit_button("Guardar"):
+            if st.form_submit_button("Guardar Trabajo"):
                 if eq and f:
                     try:
-                        fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
+                        fname = f"{datetime.now().strftime('%Y%m%d%H%M')}_{f.name}"
                         supabase.storage.from_("evidencias").upload(fname, f.getvalue())
                         url = supabase.storage.from_("evidencias").get_public_url(fname)
                         
                         supabase.table("reportes_euro").insert({
-                            "fecha": fecha_now,
+                            "fecha": f_actual,
                             "tecnico": st.session_state['usuario'],
-                            "area": ar, 
-                            "equipo": eq, 
-                            "descripcion": de, 
-                            "url_multimedia": url
+                            "area": ar, "equipo": eq, "descripcion": de, "url_multimedia": url
                         }).execute()
-                        st.success("✅ Guardado")
+                        st.success("Trabajo guardado")
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error("Error al guardar")
                 else:
-                    st.warning("Faltan datos obligatorios")
+                    st.warning("Equipo y Evidencia son obligatorios")
 
-    if menu == "📋 Historial de Trabajos":
+    if menu == "📋 Historial":
         st.header("📋 Historial de Trabajos")
-        
-        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo o Fecha")
+        busq = st.text_input("🔍 Buscar (Técnico, Área, Equipo, Fecha)")
 
         try:
-            res_h = supabase.table("reportes_euro").select("*").execute()
-            if res_h.data:
-                datos = res_h.data[::-1]
-
-                if busqueda:
-                    b = busqueda.lower()
+            res = supabase.table("reportes_euro").select("*").execute()
+            if res.data:
+                datos = res.data[::-1]
+                if busq:
+                    b = busq.lower()
                     datos = [r for r in datos if 
                              b in r['tecnico'].lower() or 
                              b in r['area'].lower() or 
                              b in (r['equipo'].lower() if r['equipo'] else "") or
                              b in r['fecha'].lower()]
 
-                # BOTÓN PDF
                 if datos:
-                    pdf_data = generar_pdf(datos)
-                    st.download_button(
-                        label="📥 Descargar Reporte PDF",
-                        data=pdf_data,
-                        file_name=f"reporte_euro_{datetime.now().strftime('%Y%m%d')}.pdf",
-                        mime="application/pdf"
-                    )
+                    pdf_bytes = generar_pdf(datos)
+                    st.download_button("📥 Descargar PDF", data=pdf_bytes, file_name="reporte.pdf", mime="application/pdf")
 
-                st.write(f"Resultados: **{len(datos)}**")
-                
+                st.write(f"Registros: {len(datos)}")
                 for r in datos:
-                    with st.expander(f"📅 {r['fecha']} | {r['equipo']} ({r['tecnico']})"):
-                        st.write(f"**📍 Área:** {r['area']}")
-                        st.write(f"**🛠️ Detalles:** {r['descripcion']}")
-                        
-                        if st.button("🗑️ Borrar", key=f"del_{r['id']}"):
-                            try:
-                                if r['url_multimedia']:
-                                    nombre = r['url_multimedia'].split("/")[-1]
-                                    supabase.storage.from_("evidencias").remove([nombre])
-                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
-                                st.rerun()
-                            except:
-                                st.error("No se pudo borrar")
-
-                        if r['url_multimedia']:
-                            url = r['url_multimedia']
-                            if any(x in url.lower() for x in ['.mp4', '.mov']):
+                    with st.expander(f"📅 {r['fecha']} | {r['equipo']}"):
+                        st.write(f"👤 {r['tecnico']} | 📍 {r['area']}")
+                        st.write(f"🛠️ {r['descripcion']}")
+                        url = r['url_multimedia']
+                        if url:
+                            if ".mp4" in url.lower() or ".mov" in url.lower():
                                 st.video(url)
                             else:
                                 st.image(url, use_container_width=True)
+                        if st.button("Eliminar", key=f"d_{r['id']}"):
+                            supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                            st.rerun()
             else:
-                st.info("Sin registros")
+                st.info("No hay datos")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error("Error al cargar datos")

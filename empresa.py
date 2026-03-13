@@ -34,7 +34,7 @@ if not st.session_state['autenticado']:
                 else:
                     st.error("Usuario o clave incorrectos")
             except Exception as e:
-                st.error(f"Error de conexión: {e}")
+                st.error(f"Error: {e}")
 
     with tab_reg:
         nu = st.text_input("Nuevo Usuario")
@@ -43,19 +43,112 @@ if not st.session_state['autenticado']:
         if st.button("Crear Cuenta"):
             try:
                 supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
-                st.success("✅ Registro exitoso. Ahora puedes iniciar sesión.")
+                st.success("✅ Registro exitoso")
             except Exception as e:
-                st.error(f"⚠️ Error al registrar: {e}")
+                st.error(f"Error: {e}")
 
     with tab_rec:
-        st.subheader("Recuperar Credenciales")
-        email_busca = st.text_input("Introduce tu correo electrónico registrado")
+        email_busca = st.text_input("Correo electrónico registrado")
         if st.button("Consultar Clave"):
             try:
                 res = supabase.table("usuarios").select("*").eq("correo", email_busca).execute()
                 if res.data:
                     info = res.data[0]
-                    st.info(f"🔑 Tu usuario es: **{info['usuario']}**")
-                    st.info(f"🔓 Tu clave es: **{info['clave']}**")
+                    st.info(f"Usuario: {info['usuario']} | Clave: {info['clave']}")
                 else:
-                    st.warning("Ese correo no está registrado en el sistema
+                    st.warning("Correo no encontrado")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+else:
+    # --- 3. APP PRINCIPAL ---
+    st.sidebar.title("Menú Principal")
+    st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
+    
+    if st.sidebar.button("🚪 Cerrar Sesión"):
+        st.session_state['autenticado'] = False
+        st.rerun()
+
+    menu = st.sidebar.radio("Ir a:", ["➕ Registrar Trabajo", "📋 Historial de Trabajos"])
+
+    # --- REGISTRAR TRABAJO ---
+    if menu == "➕ Registrar Trabajo":
+        st.header("📝 Registro de Trabajo Realizado")
+        fecha_now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        st.info(f"📅 Fecha: {fecha_now}")
+
+        with st.form("form_trabajo", clear_on_submit=True):
+            eq = st.text_input("Equipo / Maquinaria")
+            ar = st.text_input("Área / Ubicación")
+            de = st.text_area("Detalles del trabajo")
+            f = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
+            
+            if st.form_submit_button("Guardar"):
+                if eq and f:
+                    try:
+                        fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
+                        supabase.storage.from_("evidencias").upload(fname, f.getvalue())
+                        url = supabase.storage.from_("evidencias").get_public_url(fname)
+                        
+                        supabase.table("reportes_euro").insert({
+                            "fecha": fecha_now,
+                            "tecnico": st.session_state['usuario'],
+                            "area": ar, 
+                            "equipo": eq, 
+                            "descripcion": de, 
+                            "url_multimedia": url
+                        }).execute()
+                        st.success("✅ Guardado")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                else:
+                    st.warning("Faltan datos obligatorios")
+
+    # --- HISTORIAL ---
+    if menu == "📋 Historial de Trabajos":
+        st.header("📋 Historial de Trabajos")
+        
+        # BUSCADOR ÚNICO
+        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo o Fecha", placeholder="Ej: Juan, Bodega, Excavadora...")
+
+        try:
+            res_h = supabase.table("reportes_euro").select("*").execute()
+            if res_h.data:
+                datos = res_h.data[::-1]
+
+                # Filtrado inteligente
+                if busqueda:
+                    b = busqueda.lower()
+                    datos = [r for r in datos if 
+                             b in r['tecnico'].lower() or 
+                             b in r['area'].lower() or 
+                             b in (r['equipo'].lower() if r['equipo'] else "") or
+                             b in r['fecha'].lower()]
+
+                st.write(f"Resultados: **{len(datos)}**")
+                
+                for r in datos:
+                    with st.expander(f"📅 {r['fecha']} | {r['equipo']} ({r['tecnico']})"):
+                        st.write(f"**📍 Área:** {r['area']}")
+                        st.write(f"**🛠️ Detalles:** {r['descripcion']}")
+                        
+                        if st.button("🗑️ Borrar", key=f"del_{r['id']}"):
+                            try:
+                                if r['url_multimedia']:
+                                    nombre = r['url_multimedia'].split("/")[-1]
+                                    supabase.storage.from_("evidencias").remove([nombre])
+                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                                st.rerun()
+                            except:
+                                st.error("No se pudo borrar")
+
+                        if r['url_multimedia']:
+                            url = r['url_multimedia']
+                            if any(x in url.lower() for x in ['.mp4', '.mov']):
+                                st.video(url)
+                            else:
+                                st.image(url, use_container_width=True)
+            else:
+                st.info("Sin registros")
+        except Exception as e:
+            st.error(f"Error: {e}")

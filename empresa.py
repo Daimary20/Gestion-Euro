@@ -29,9 +29,9 @@ if not st.session_state['autenticado']:
                     st.session_state['autenticado'] = True
                     st.session_state['usuario'] = u
                     st.rerun()
-                else: 
+                else:
                     st.error("Usuario o clave incorrectos")
-            except Exception as e: 
+            except Exception as e:
                 st.error(f"Error de conexión: {e}")
 
     with tab_reg:
@@ -42,24 +42,25 @@ if not st.session_state['autenticado']:
             try:
                 supabase.table("usuarios").insert({"usuario": nu, "correo": ne, "clave": np}).execute()
                 st.success("✅ Registro exitoso. Ahora puedes iniciar sesión.")
-            except Exception as e: 
+            except Exception as e:
                 st.error(f"⚠️ Error al registrar: {e}")
 
 else:
-    # --- APP PRINCIPAL (SESIÓN INICIADA) ---
+    # --- APP PRINCIPAL ---
     st.sidebar.title("Menú Principal")
-    st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
+    st.sidebar.write(f"👤 Bienvenido: **{st.session_state['usuario']}**")
     
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
         st.rerun()
 
-    menu = st.sidebar.radio("Ir a:", ["➕ Registrar Reporte", "📋 Ver Historial"])
+    menu = st.sidebar.radio("Navegación:", ["➕ Registrar Reporte", "📋 Ver Historial"])
 
+    # --- MÓDULO: REGISTRAR ---
     if menu == "➕ Registrar Reporte":
         st.header("📝 Nuevo Reporte de Incidencia")
         fecha_auto = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        st.info(f"📅 **Fecha del Reporte:** {fecha_auto}")
+        st.info(f"📅 **Fecha:** {fecha_auto}")
 
         with st.form("registro_form", clear_on_submit=True):
             eq = st.text_input("Equipo / Maquinaria")
@@ -70,16 +71,63 @@ else:
             if st.form_submit_button("Guardar Reporte"):
                 if eq and f:
                     try:
-                        # 1. Subir al Storage
+                        # 1. Subir al Storage (Bucket: evidencias)
                         fname = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.name}"
                         supabase.storage.from_("evidencias").upload(fname, f.getvalue())
                         url = supabase.storage.from_("evidencias").get_public_url(fname)
                         
-                        # 2. Guardar datos
+                        # 2. Guardar en Base de Datos
                         supabase.table("reportes_euro").insert({
                             "fecha": fecha_auto,
                             "tecnico": st.session_state['usuario'],
                             "area": ar, 
                             "equipo": eq, 
                             "descripcion": de, 
-                            "url_mult
+                            "url_multimedia": url
+                        }).execute()
+                        st.success("✅ Reporte enviado correctamente")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+                else:
+                    st.warning("Completa los campos obligatorios.")
+
+    # --- MÓDULO: HISTORIAL CON BORRADO ---
+    if menu == "📋 Ver Historial":
+        st.header("📋 Historial de Reportes")
+        try:
+            res = supabase.table("reportes_euro").select("*").execute()
+            if res.data:
+                for r in res.data[::-1]:
+                    with st.expander(f"📅 {r['fecha']} - ⚙️ {r['equipo']}"):
+                        col_info, col_del = st.columns([0.85, 0.15])
+                        
+                        with col_info:
+                            st.write(f"**Técnico:** {r['tecnico']} | **Área:** {r['area']}")
+                            st.write(f"**Descripción:** {r['descripcion']}")
+                        
+                        with col_del:
+                            # BOTÓN DE ELIMINAR
+                            if st.button("🗑️ Borrar", key=f"btn_{r['id']}"):
+                                # A. Borrar archivo del Storage
+                                if r['url_multimedia']:
+                                    try:
+                                        nombre_archivo = r['url_multimedia'].split("/")[-1]
+                                        supabase.storage.from_("evidencias").remove([nombre_archivo])
+                                    except: pass # Si el archivo ya no existe, ignorar
+                                
+                                # B. Borrar registro de la tabla
+                                supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                                st.success("Eliminado")
+                                st.rerun()
+
+                        # VISUALIZACIÓN MULTIMEDIA
+                        url = r['url_multimedia']
+                        if url:
+                            if any(ext in url.lower() for ext in ['.mp4', '.mov']):
+                                st.video(url)
+                            else:
+                                st.image(url, use_container_width=True)
+            else:
+                st.info("No hay reportes registrados.")
+        except Exception as e:
+            st.error(f"Error al cargar: {e}")

@@ -77,7 +77,7 @@ if not st.session_state['autenticado']:
         nombre_completo = st.text_input("Nombre y Apellido")
         cargo_area = st.selectbox("Cargo / Área Técnica", [
             "Operador de habitaciones", "Herrería", "Mecánica de cocina", 
-            "Asistente de ingenieria", "Operador de planta", "Operador de planta"
+            "Asistente de ingenieria", "Operador de planta",
             "Jefe de departamento", "Arquitecto", "Supervisor", "Otros"
         ])
         cedula_id = st.text_input("Cédula de Identidad")

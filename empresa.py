@@ -67,149 +67,114 @@ if not st.session_state['autenticado']:
                     st.session_state['usuario'] = res.data[0]['usuario']
                     st.rerun()
                 else:
-                    st.error("Datos incorrectos. Verifique su usuario o clave.")
+                    st.error("Datos incorrectos.")
             except Exception as e:
                 st.error(f"Error de conexión: {e}")
 
     with tab2:
         st.subheader("Formulario de Registro")
-        nombre_completo = st.text_input("Nombre y Apellido", placeholder="Ej: Juan Pérez")
+        nombre_completo = st.text_input("Nombre y Apellido")
+        # CARGOS ACTUALIZADOS
         cargo_area = st.selectbox("Cargo / Área Técnica", [
-            "Operador de Habitaciones", "Áreas Públicas", "Lavandería", 
-            "Mantenimiento General", "Electricidad", "Plomería", "Supervisor de Ingeniería"
+            "Operador de habitaciones", "Herrería", "Mecánica de cocina", 
+            "Asistente", "Jefe de departamento", "Ingeniero", "Arquitecto", "Supervisor", "Otros"
         ])
-        cedula_id = st.text_input("Cédula de Identidad (Solo números)")
+        cedula_id = st.text_input("Cédula de Identidad")
         correo_inst = st.text_input("Correo Electrónico")
-        clave_acc = st.text_input("Cree una Contraseña (mín. 6 caracteres)", type="password")
-        auth_code = st.text_input("Código de Autorización de la Empresa", type="password")
+        clave_acc = st.text_input("Contraseña", type="password")
+        auth_code = st.text_input("Código de Autorización", type="password")
         
         if st.button("Registrar Nuevo Usuario"):
             if auth_code == CODIGO_REGISTRO_ADMIN:
                 nombre_usuario_final = f"{nombre_completo} - {cargo_area}"
                 try:
                     supabase.table("usuarios").insert({
-                        "usuario": nombre_usuario_final, 
-                        "cedula": cedula_id, 
-                        "correo": correo_inst, 
-                        "clave": clave_acc
+                        "usuario": nombre_usuario_final, "cedula": cedula_id, 
+                        "correo": correo_inst, "clave": clave_acc
                     }).execute()
-                    st.success(f"✅ ¡Registro Exitoso! Bienvenido, {nombre_usuario_final}.")
+                    st.success(f"✅ ¡Registro Exitoso como {cargo_area}!")
                 except:
-                    st.error("Error: El número de cédula ya se encuentra registrado.")
+                    st.error("Error: Cédula ya registrada.")
             else:
                 st.error("Código de autorización inválido.")
 
 else:
     # --- PANEL PRINCIPAL ---
     st.sidebar.title("Euro Control Ingenieria")
-    st.sidebar.write(f"👤 **Usuario Activo:**\n{st.session_state['usuario']}")
+    st.sidebar.write(f"👤 **Usuario:**\n{st.session_state['usuario']}")
     
-    # Verificación de rango de Supervisor
-    es_supervisor = "Supervisor" in st.session_state['usuario']
+    # PERMISOS ESPECIALES (Supervisor, Arquitecto, Ingeniero, Jefe)
+    u_actual = st.session_state['usuario']
+    es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe"])
 
-    if st.sidebar.button("🚪 Cerrar Sesión Segura"):
-        try:
-            cookie_manager.delete("euro_user_session")
-        except:
-            pass
+    if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
         st.rerun()
 
-    menu = st.sidebar.radio("Navegación Principal", ["➕ Registrar Actividad", "📋 Historial y Revisión"])
+    menu = st.sidebar.radio("Navegación", ["➕ Registrar Actividad", "📋 Historial y Revisión"])
 
     if menu == "➕ Registrar Actividad":
-        st.header("📝 Registro de Trabajo Diario")
+        st.header("📝 Registro de Trabajo")
         with st.form("form_registro", clear_on_submit=True):
-            equipo_maq = st.text_input("Equipo o Maquinaria intervenida")
-            ubicacion_exacta = st.text_input("Ubicación / Área (Ej: Hab 402, Cocina)")
-            descripcion_tarea = st.text_area("Descripción detallada del trabajo realizado")
-            evidencia_file = st.file_uploader("Adjuntar Evidencia (Foto o Video)", type=["jpg","png","jpeg","mp4","mov"])
+            equipo_maq = st.text_input("Equipo")
+            ubicacion_exacta = st.text_input("Ubicación")
+            descripcion_tarea = st.text_area("Descripción")
+            evidencia_file = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
             
             if st.form_submit_button("Guardar Reporte"):
                 if equipo_maq and evidencia_file:
                     try:
-                        timestamp = datetime.now().strftime('%Y%m%d%H%M')
-                        nombre_archivo = f"{timestamp}_{evidencia_file.name}"
+                        nombre_archivo = f"{datetime.now().strftime('%Y%m%d%H%M')}_{evidencia_file.name}"
                         supabase.storage.from_("evidencias").upload(nombre_archivo, evidencia_file.getvalue())
                         url_file = supabase.storage.from_("evidencias").get_public_url(nombre_archivo)
-                        
                         supabase.table("reportes_euro").insert({
                             "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
                             "tecnico": st.session_state['usuario'],
-                            "area": ubicacion_exacta, 
-                            "equipo": equipo_maq, 
-                            "descripcion": descripcion_tarea, 
-                            "url_multimedia": url_file,
+                            "area": ubicacion_exacta, "equipo": equipo_maq, 
+                            "descripcion": descripcion_tarea, "url_multimedia": url_file,
                             "estado": "Pendiente"
                         }).execute()
-                        st.success("✅ Actividad registrada correctamente en la base de datos.")
+                        st.success("✅ Actividad guardada.")
                     except:
-                        st.error("Error al procesar el archivo. Intente con una imagen más pequeña.")
-                else:
-                    st.warning("Por favor, complete el nombre del equipo y adjunte una evidencia.")
+                        st.error("Error al subir archivo.")
 
     if menu == "📋 Historial y Revisión":
         st.header("📋 Historial de Reportes")
-        busqueda_global = st.text_input("🔍 Buscar por técnico, equipo o estado...")
-        
         res_db = supabase.table("reportes_euro").select("*").execute()
         if res_db.data:
             lista_datos = res_db.data[::-1]
-            
-            if busqueda_global:
-                bg = busqueda_global.lower()
-                lista_datos = [r for r in lista_datos if bg in r['tecnico'].lower() or bg in r['equipo'].lower() or bg in r.get('estado', '').lower()]
-
-            if lista_datos:
-                st.download_button("📥 Descargar Reporte Consolidado (PDF)", 
-                                 data=generar_pdf(lista_datos), 
-                                 file_name=f"reporte_ingenieria_{datetime.now().strftime('%d_%m')}.pdf")
+            st.download_button("📥 Descargar PDF", data=generar_pdf(lista_datos), file_name="reporte.pdf")
 
             for item in lista_datos:
                 status = item.get('estado', 'Pendiente')
-                # Indicadores visuales de estado
                 color_tag = "🟠" if status == "Pendiente" else "🟢" if status == "Confirmado" else "🔴"
                 
                 with st.expander(f"{color_tag} {item['fecha']} | {item['equipo']} | {status}"):
-                    col_info, col_media = st.columns([1, 1])
+                    st.write(f"👷 **Técnico:** {item['tecnico']}")
+                    st.write(f"📝 **Descripción:** {item['descripcion']}")
+                    if item.get('comentario_supervisor'):
+                        st.info(f"💬 **Observación:** {item['comentario_supervisor']}")
                     
-                    with col_info:
-                        st.write(f"👷 **Técnico:** {item['tecnico']}")
-                        st.write(f"📍 **Ubicación:** {item['area']}")
-                        st.write(f"📝 **Descripción:** {item['descripcion']}")
-                        if item.get('comentario_supervisor'):
-                            st.info(f"💬 **Nota del Supervisor:** {item['comentario_supervisor']}")
-                    
-                    with col_media:
-                        if item['url_multimedia']:
-                            if ".mp4" in item['url_multimedia'].lower() or ".mov" in item['url_multimedia'].lower():
-                                st.video(item['url_multimedia'])
-                            else:
-                                st.image(item['url_multimedia'], use_container_width=True)
+                    if item['url_multimedia']:
+                        st.image(item['url_multimedia']) if ".mp4" not in item['url_multimedia'].lower() else st.video(item['url_multimedia'])
 
-                    # PANEL EXCLUSIVO PARA SUPERVISORES
-                    if es_supervisor:
+                    # PANEL DE SUPERVISIÓN Y ELIMINACIÓN RESTRINGIDO
+                    if es_admin_jerarquia:
                         st.markdown("---")
-                        st.subheader("⚡ Panel de Supervisión")
-                        comentario_input = st.text_input("Escribir observación o comentario", key=f"input_{item['id']}")
-                        btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
+                        comentario_input = st.text_input("Comentario de revisión", key=f"in_{item['id']}")
+                        c1, c2, c3 = st.columns([1, 1, 2])
                         
-                        if btn_col1.button("✅ Confirmar", key=f"btn_ok_{item['id']}"):
-                            supabase.table("reportes_euro").update({
-                                "estado": "Confirmado", 
-                                "comentario_supervisor": comentario_input
-                            }).eq("id", item['id']).execute()
+                        if c1.button("✅ Confirmar", key=f"ok_{item['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
                             st.rerun()
                             
-                        if btn_col2.button("❌ Observado", key=f"btn_no_{item['id']}"):
-                            supabase.table("reportes_euro").update({
-                                "estado": "Observado", 
-                                "comentario_supervisor": comentario_input
-                            }).eq("id", item['id']).execute()
+                        if c2.button("❌ Observado", key=f"no_{item['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
                             st.rerun()
                             
-                        if btn_col3.button("🗑️ Eliminar Reporte", key=f"btn_del_{item['id']}"):
+                        # BOTÓN DE ELIMINACIÓN SOLO PARA JERARQUÍA ALTA
+                        if c3.button("🗑️ Eliminar Reporte", key=f"del_{item['id']}"):
                             supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
                             st.rerun()
         else:
-            st.info("No se encontraron reportes registrados actualmente.")
+            st.info("Sin reportes.")

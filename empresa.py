@@ -66,14 +66,13 @@ def generar_pdf(lista_reportes):
 # --- INTERFAZ DE ACCESO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Euro Control Ingenieria")
-    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro", "📧 Recuperar Cuenta"])
+    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro", "📧 Recuperar y Cambiar Contraseña"])
     
     with tab1:
         u = st.text_input("Usuario o Cédula").strip()
         p = st.text_input("Contraseña", type="password").strip()
         recordar = st.checkbox("Recordar sesión en este equipo")
         if st.button("Ingresar"):
-            # Filtra por el campo 'usuario' O por el campo 'cedula'
             res = supabase.table("usuarios").select("*").or_(f"usuario.eq.{u},cedula.eq.{u}").eq("clave", p).execute()
             if res.data:
                 st.session_state['autenticado'] = True
@@ -86,9 +85,7 @@ if not st.session_state['autenticado']:
     with tab2:
         st.subheader("Registro de Nuevo Personal")
         nom_real = st.text_input("Nombre y Apellido Completo")
-        # --- NUEVA OPCIÓN SOLICITADA ---
         user_alias = st.text_input("Cree un Nombre de Usuario (Ej: juan.perez)")
-        
         car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Arquitecto", "Operador de Planta", "Operador de Habitaciones", "Operador de Áreas Públicas", "Plomero", "Técnico de Ascensores", "Técnico Mecánica General", "Técnico Mec. Cocina Y Lavandería", "Otros"])
         ced = st.text_input("Cédula de Identidad")
         cor = st.text_input("Correo")
@@ -98,29 +95,44 @@ if not st.session_state['autenticado']:
         if st.button("Crear Usuario"):
             if cod == CODIGO_REGISTRO_ADMIN:
                 if user_alias and ced and cla:
-                    # Guardamos el alias elegido por el usuario
                     supabase.table("usuarios").insert({
                         "usuario": user_alias, 
                         "cedula": ced, 
                         "correo": cor, 
                         "clave": cla,
-                        "nombre_completo": f"{nom_real} - {car}" # Opcional: guardar el cargo aquí
+                        "nombre_completo": f"{nom_real} - {car}"
                     }).execute()
                     st.success(f"¡Registrado! Ahora puedes entrar con tu usuario '{user_alias}' o con tu cédula.")
                 else: st.warning("Por favor rellene Usuario, Cédula y Clave.")
             else: st.error("Código Admin incorrecto.")
 
     with tab3:
-        st.subheader("Recuperación")
-        m_rec = st.text_input("Correo registrado")
-        if st.button("Consultar datos"):
+        st.subheader("Gestión de Contraseña")
+        m_rec = st.text_input("Correo registrado para verificar identidad")
+        if st.button("Verificar Correo"):
             res = supabase.table("usuarios").select("*").eq("correo", m_rec).execute()
-            if res.data: st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
+            if res.data:
+                st.session_state['reset_user'] = res.data[0]['usuario']
+                st.success(f"Usuario identificado: {res.data[0]['usuario']}")
+                st.info(f"Contraseña actual: {res.data[0]['clave']}")
+            else:
+                st.error("Correo no encontrado.")
+        
+        if 'reset_user' in st.session_state:
+            st.divider()
+            nueva_p = st.text_input("Nueva Contraseña", type="password")
+            confirm_p = st.text_input("Confirmar Nueva Contraseña", type="password")
+            if st.button("Actualizar Contraseña"):
+                if nueva_p == confirm_p and nueva_p != "":
+                    supabase.table("usuarios").update({"clave": nueva_p}).eq("usuario", st.session_state['reset_user']).execute()
+                    st.success("✅ Contraseña actualizada correctamente. Ya puede iniciar sesión.")
+                    del st.session_state['reset_user']
+                else:
+                    st.warning("Las contraseñas no coinciden o están vacías.")
 
 else:
     # --- PANEL PRINCIPAL ---
     u_actual = st.session_state['usuario']
-    # Mantenemos la lógica de permisos basada en el usuario actual
     es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     st.sidebar.title("Euro Control")

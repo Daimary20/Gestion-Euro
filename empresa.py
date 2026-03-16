@@ -3,7 +3,6 @@ from datetime import datetime
 from supabase import create_client, Client
 from fpdf import FPDF
 import extra_streamlit_components as stx
-import re
 
 # --- CONFIGURACIÓN ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co"
@@ -114,8 +113,8 @@ else:
     st.sidebar.write(f"👤 **Usuario:**\n{st.session_state['usuario']}")
     
     u_actual = st.session_state['usuario']
-    # SE AGREGA "Asistente" A LA JERARQUÍA DE PERMISOS
-    es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente"])
+    # DAIMARY SALAS y CARGOS ALTOS tienen permisos administrativos
+    es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
@@ -192,9 +191,12 @@ else:
                         if c2.button("❌ Observado", key=f"no_{item['id']}"):
                             supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
                             st.rerun()
-                        if c3.button("🗑️ Eliminar Reporte", key=f"del_{item['id']}"):
-                            supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
-                            st.rerun()
+                        
+                        # ELIMINAR CON CONFIRMACIÓN
+                        if c3.checkbox("Confirmar para borrar", key=f"chk_{item['id']}"):
+                            if st.button("🗑️ Eliminar Reporte Definitivamente", key=f"del_{item['id']}"):
+                                supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
+                                st.rerun()
         else:
             st.info("No hay reportes.")
 
@@ -207,10 +209,12 @@ else:
                     col_u, col_b = st.columns([3, 1])
                     col_u.write(f"👤 **{u['usuario']}** (C.I: {u['cedula']})")
                     if u['usuario'] != st.session_state['usuario']:
-                        if col_b.button("🗑️ Eliminar Usuario", key=f"user_{u['id']}"):
-                            supabase.table("usuarios").delete().eq("id", u['id']).execute()
-                            st.success(f"Usuario {u['usuario']} eliminado.")
-                            st.rerun()
+                        # ELIMINAR USUARIO CON CONFIRMACIÓN
+                        if col_b.checkbox("Eliminar", key=f"chk_u_{u['id']}"):
+                            if col_b.button("Confirmar Borrado", key=f"user_{u['id']}"):
+                                supabase.table("usuarios").delete().eq("id", u['id']).execute()
+                                st.success(f"Usuario {u['usuario']} eliminado.")
+                                st.rerun()
                     else:
                         col_b.write("*(Tú)*")
                     st.divider()

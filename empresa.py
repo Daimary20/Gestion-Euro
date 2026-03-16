@@ -54,7 +54,6 @@ def generar_pdf(lista_reportes):
 # --- ACCESO Y SEGURIDAD ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Euro Control Ingenieria")
-    # Se restauró la pestaña de Recuperar Cuenta
     tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro de Personal", "📧 Recuperar Cuenta"])
     
     with tab1:
@@ -77,8 +76,8 @@ if not st.session_state['autenticado']:
         nombre_completo = st.text_input("Nombre y Apellido")
         cargo_area = st.selectbox("Cargo / Área Técnica", [
             "Operador de habitaciones", "Herrería", "Mecánica de cocina", 
-            "Asistente de ingenieria", "Operador de planta",
-            "Jefe de departamento", "Arquitecto", "Supervisor", "Otros"
+            "Asistente", "Asistente de ingenieria", "Operador de planta", 
+            "Jefe de departamento", "Ingeniero", "Arquitecto", "Supervisor", "Otros"
         ])
         cedula_id = st.text_input("Cédula de Identidad")
         correo_inst = st.text_input("Correo Electrónico")
@@ -93,7 +92,7 @@ if not st.session_state['autenticado']:
                         "usuario": nombre_usuario_final, "cedula": cedula_id, 
                         "correo": correo_inst, "clave": clave_acc
                     }).execute()
-                    st.success(f"✅ ¡Registro Exitoso como {cargo_area}!")
+                    st.success(f"✅ ¡Registro Exitoso!")
                 except:
                     st.error("Error: Cédula ya registrada.")
             else:
@@ -103,14 +102,11 @@ if not st.session_state['autenticado']:
         st.subheader("Recuperación de Credenciales")
         email_buscar = st.text_input("Ingrese su correo electrónico registrado")
         if st.button("Consultar Datos"):
-            try:
-                res = supabase.table("usuarios").select("*").eq("correo", email_buscar).execute()
-                if res.data:
-                    st.info(f"**Usuario:** {res.data[0]['usuario']}\n\n**Contraseña:** {res.data[0]['clave']}")
-                else:
-                    st.warning("Este correo no se encuentra en nuestra base de datos.")
-            except:
-                st.error("Ocurrió un error al consultar la base de datos.")
+            res = supabase.table("usuarios").select("*").eq("correo", email_buscar).execute()
+            if res.data:
+                st.info(f"**Usuario:** {res.data[0]['usuario']}\n\n**Contraseña:** {res.data[0]['clave']}")
+            else:
+                st.warning("Correo no encontrado.")
 
 else:
     # --- PANEL PRINCIPAL ---
@@ -118,13 +114,18 @@ else:
     st.sidebar.write(f"👤 **Usuario:**\n{st.session_state['usuario']}")
     
     u_actual = st.session_state['usuario']
-    es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe"])
+    # SE AGREGA "Asistente" A LA JERARQUÍA DE PERMISOS
+    es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente"])
 
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
         st.rerun()
 
-    menu = st.sidebar.radio("Navegación", ["➕ Registrar Actividad", "📋 Historial y Revisión"])
+    opciones_menu = ["➕ Registrar Actividad", "📋 Historial y Búsqueda"]
+    if es_admin_jerarquia:
+        opciones_menu.append("👥 Gestión de Personal")
+        
+    menu = st.sidebar.radio("Navegación", opciones_menu)
 
     if menu == "➕ Registrar Actividad":
         st.header("📝 Registro de Trabajo")
@@ -151,12 +152,18 @@ else:
                     except:
                         st.error("Error al subir archivo.")
 
-    if menu == "📋 Historial y Revisión":
+    if menu == "📋 Historial y Búsqueda":
         st.header("📋 Historial de Reportes")
+        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo o Estado...")
+        
         res_db = supabase.table("reportes_euro").select("*").execute()
         if res_db.data:
             lista_datos = res_db.data[::-1]
-            st.download_button("📥 Descargar PDF", data=generar_pdf(lista_datos), file_name="reporte.pdf")
+            if busqueda:
+                b = busqueda.lower()
+                lista_datos = [r for r in lista_datos if b in r['tecnico'].lower() or b in r['area'].lower() or b in r['equipo'].lower() or b in r.get('estado', '').lower()]
+
+            st.download_button("📥 Descargar PDF", data=generar_pdf(lista_datos), file_name="reporte_euro.pdf")
 
             for item in lista_datos:
                 status = item.get('estado', 'Pendiente')
@@ -164,6 +171,7 @@ else:
                 
                 with st.expander(f"{color_tag} {item['fecha']} | {item['equipo']} | {status}"):
                     st.write(f"👷 **Técnico:** {item['tecnico']}")
+                    st.write(f"📍 **Ubicación:** {item['area']}")
                     st.write(f"📝 **Descripción:** {item['descripcion']}")
                     if item.get('comentario_supervisor'):
                         st.info(f"💬 **Observación:** {item['comentario_supervisor']}")
@@ -178,17 +186,31 @@ else:
                         st.markdown("---")
                         comentario_input = st.text_input("Comentario de revisión", key=f"in_{item['id']}")
                         c1, c2, c3 = st.columns([1, 1, 2])
-                        
                         if c1.button("✅ Confirmar", key=f"ok_{item['id']}"):
                             supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
                             st.rerun()
-                            
                         if c2.button("❌ Observado", key=f"no_{item['id']}"):
                             supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
                             st.rerun()
-                            
                         if c3.button("🗑️ Eliminar Reporte", key=f"del_{item['id']}"):
                             supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
                             st.rerun()
         else:
-            st.info("Sin reportes.")
+            st.info("No hay reportes.")
+
+    if menu == "👥 Gestión de Personal":
+        st.header("👥 Control de Usuarios")
+        res_users = supabase.table("usuarios").select("*").execute()
+        if res_users.data:
+            for u in res_users.data:
+                with st.container():
+                    col_u, col_b = st.columns([3, 1])
+                    col_u.write(f"👤 **{u['usuario']}** (C.I: {u['cedula']})")
+                    if u['usuario'] != st.session_state['usuario']:
+                        if col_b.button("🗑️ Eliminar Usuario", key=f"user_{u['id']}"):
+                            supabase.table("usuarios").delete().eq("id", u['id']).execute()
+                            st.success(f"Usuario {u['usuario']} eliminado.")
+                            st.rerun()
+                    else:
+                        col_b.write("*(Tú)*")
+                    st.divider()

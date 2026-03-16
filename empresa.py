@@ -21,7 +21,6 @@ cookie_manager = stx.CookieManager()
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
-# Intento de recuperar sesión guardada
 if not st.session_state['autenticado']:
     try:
         user_saved = cookie_manager.get(cookie="euro_user_session")
@@ -57,15 +56,16 @@ def generar_pdf(lista_reportes):
         pdf.cell(50, 8, str(firma)[:35], 1, 1)
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- INTERFAZ ---
+# --- INTERFAZ DE ACCESO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Euro Control Ingenieria")
-    tab1, tab2 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro"])
+    # Restauradas las 3 pestañas originales
+    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro", "📧 Recuperar Cuenta"])
     
     with tab1:
         u = st.text_input("Usuario o Cédula").strip()
         p = st.text_input("Contraseña", type="password").strip()
-        recordar = st.checkbox("Recordar sesión en este dispositivo")
+        recordar = st.checkbox("Recordar sesión")
         if st.button("Ingresar"):
             res = supabase.table("usuarios").select("*").or_(f"usuario.eq.{u},cedula.eq.{u}").eq("clave", p).execute()
             if res.data:
@@ -74,25 +74,35 @@ if not st.session_state['autenticado']:
                 if recordar:
                     cookie_manager.set("euro_user_session", res.data[0]['usuario'])
                 st.rerun()
-            else: st.error("Error de acceso.")
+            else: st.error("Acceso denegado.")
 
     with tab2:
-        st.subheader("Registro")
+        st.subheader("Registro de Personal")
         nom = st.text_input("Nombre Completo")
         car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Otros"])
         ced = st.text_input("Cédula")
         cor = st.text_input("Correo")
         cla = st.text_input("Clave", type="password")
-        cod = st.text_input("Código Autorización", type="password")
-        if st.button("Registrar Usuario"):
+        cod = st.text_input("Código de Autorización", type="password")
+        if st.button("Registrar"):
             if cod == CODIGO_REGISTRO_ADMIN:
                 supabase.table("usuarios").insert({"usuario": f"{nom} - {car}", "cedula": ced, "correo": cor, "clave": cla}).execute()
-                st.success("Registrado correctamente.")
+                st.success("Usuario registrado.")
             else: st.error("Código incorrecto.")
+
+    with tab3:
+        st.subheader("Recuperación de cuenta")
+        mail_rec = st.text_input("Ingrese su correo registrado")
+        if st.button("Recuperar Credenciales"):
+            res = supabase.table("usuarios").select("*").eq("correo", mail_rec).execute()
+            if res.data:
+                st.info(f"**Usuario:** {res.data[0]['usuario']}  \n**Contraseña:** {res.data[0]['clave']}")
+            else:
+                st.warning("Correo no encontrado.")
 
 else:
     u_actual = st.session_state['usuario']
-    # DAIMARY SALAS y CARGOS ALTOS tienen permisos administrativos
+    # DAIMARY SALAS tiene permisos de administración total
     es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     st.sidebar.title("Euro Control")
@@ -106,11 +116,11 @@ else:
     menu = st.sidebar.radio("Navegación", ["➕ Actividad", "📋 Historial", "👥 Personal"] if es_admin else ["➕ Actividad", "📋 Historial"])
 
     if menu == "➕ Actividad":
-        st.header("Nuevo Reporte")
+        st.header("Registrar Actividad")
         with st.form("f_act"):
             eq = st.text_input("Equipo / Máquina")
-            ar = st.text_input("Área a la que pertenece")
-            ds = st.text_area("Descripción de la tarea")
+            ar = st.text_input("Área")
+            ds = st.text_area("Descripción")
             ev = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
             if st.form_submit_button("Guardar"):
                 if eq and ev:
@@ -121,18 +131,17 @@ else:
                         "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
                         "tecnico": u_actual, "area": ar, "equipo": eq, "descripcion": ds, "url_multimedia": url, "estado": "Pendiente"
                     }).execute()
-                    st.success("Reporte guardado.")
+                    st.success("Guardado.")
 
     if menu == "📋 Historial":
-        st.header("Historial de Actividades")
+        st.header("Historial")
         res = supabase.table("reportes_euro").select("*").execute()
         if res.data:
             datos = res.data[::-1]
-            st.download_button("📥 Descargar PDF", data=generar_pdf(datos), file_name="reporte_euro.pdf")
+            st.download_button("📥 Descargar PDF", data=generar_pdf(datos), file_name="reporte.pdf")
             for i in datos:
-                with st.expander(f"{i['fecha']} | {i['equipo']} ({i.get('area', 'Sin Área')})"):
-                    st.write(f"**Área:** {i.get('area', 'No especificada')}")
-                    st.write(f"**Técnico:** {i['tecnico']}")
+                with st.expander(f"{i['fecha']} | {i['equipo']} ({i.get('area', 'N/A')})"):
+                    st.write(f"**Área:** {i.get('area', 'N/A')} | **Técnico:** {i['tecnico']}")
                     st.write(f"**Descripción:** {i['descripcion']}")
                     if i['url_multimedia']:
                         if ".mp4" in i['url_multimedia'].lower(): st.video(i['url_multimedia'])
@@ -141,7 +150,7 @@ else:
                     if es_admin:
                         st.divider()
                         obs = st.text_input("Observación", key=f"obs_{i['id']}")
-                        firma = f"{obs} (Revisado por: {u_actual})"
+                        firma = f"{obs} (Por: {u_actual})"
                         c1, c2, c3 = st.columns(3)
                         if c1.button("✅ Confirmar", key=f"ok_{i['id']}"):
                             supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
@@ -149,14 +158,14 @@ else:
                         if c2.button("❌ Observar", key=f"no_{i['id']}"):
                             supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
                             st.rerun()
-                        # NUEVA OPCIÓN PARA DAIMARY: Borrar reportes
-                        if c3.checkbox("Eliminar este reporte", key=f"del_chk_{i['id']}"):
-                            if st.button("Confirmar Borrado", key=f"btn_del_{i['id']}"):
+                        # OPCIÓN PARA BORRAR REPORTES (Daimary y Admins)
+                        if c3.checkbox("Borrar reporte", key=f"del_chk_{i['id']}"):
+                            if st.button("Confirmar Eliminación", key=f"btn_del_{i['id']}"):
                                 supabase.table("reportes_euro").delete().eq("id", i['id']).execute()
                                 st.rerun()
 
     if menu == "👥 Personal":
-        st.header("Gestión de Usuarios")
+        st.header("Personal")
         u_res = supabase.table("usuarios").select("*").execute()
         for us in u_res.data:
             c_u, c_b = st.columns([3, 1])

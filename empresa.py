@@ -4,7 +4,7 @@ from supabase import create_client, Client
 from fpdf import FPDF
 import extra_streamlit_components as stx
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE SUPABASE ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co"
 KEY_SUPABASE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoYXhjZWRsbWFuY3N3eG5lYmpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDU0MzgsImV4cCI6MjA4ODkyMTQzOH0.CnbDYu92BTjqMFSf0CBunNoE8XIBSW_gJyo2Dr7auIs"
 CODIGO_REGISTRO_ADMIN = "EURO2026" 
@@ -22,35 +22,46 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    user_saved = cookie_manager.get(cookie="euro_user_session")
-    if user_saved:
-        st.session_state['autenticado'] = True
-        st.session_state['usuario'] = user_saved
+    try:
+        user_saved = cookie_manager.get(cookie="euro_user_session")
+        if user_saved:
+            st.session_state['autenticado'] = True
+            st.session_state['usuario'] = user_saved
+    except:
+        pass
 
-# --- FUNCIONES AUXILIARES ---
+# --- FUNCIONES ---
 def generar_pdf(lista_reportes):
-    pdf = FPDF()
+    pdf = FPDF(orientation='L', unit='mm', format='A4') # Orientación horizontal para más espacio
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(190, 10, "EURO CONTROL INGENIERIA - REPORTE DE GESTION", ln=True, align="C")
+    pdf.cell(280, 10, "EURO CONTROL INGENIERIA - REPORTE DE GESTION", ln=True, align="C")
     pdf.ln(5)
-    pdf.set_font("Arial", "B", 10)
+    
+    # Encabezados con columna de Descripción
+    pdf.set_font("Arial", "B", 9)
     pdf.set_fill_color(230, 230, 230)
-    pdf.cell(30, 8, "Fecha", 1, 0, "L", True)
-    pdf.cell(45, 8, "Equipo", 1, 0, "L", True)
-    pdf.cell(45, 8, "Responsable", 1, 0, "L", True)
-    pdf.cell(30, 8, "Estado", 1, 0, "L", True)
-    pdf.cell(40, 8, "Ubicacion", 1, 1, "L", True)
+    pdf.cell(25, 8, "Fecha", 1, 0, "C", True)
+    pdf.cell(40, 8, "Equipo", 1, 0, "C", True)
+    pdf.cell(40, 8, "Responsable", 1, 0, "C", True)
+    pdf.cell(35, 8, "Ubicacion", 1, 0, "C", True)
+    pdf.cell(100, 8, "Descripcion", 1, 0, "C", True) # Nueva columna
+    pdf.cell(30, 8, "Estado", 1, 1, "C", True)
+    
     pdf.set_font("Arial", "", 8)
     for r in lista_reportes:
-        pdf.cell(30, 8, str(r.get('fecha', ''))[:10], 1)
-        pdf.cell(45, 8, str(r.get('equipo', ''))[:25], 1)
-        pdf.cell(45, 8, str(r.get('tecnico', ''))[:25], 1)
-        pdf.cell(30, 8, str(r.get('estado', 'Pendiente')), 1)
-        pdf.cell(40, 8, str(r.get('area', ''))[:20], 1, 1)
+        # Usamos multi_cell o truncado para que no se desborde la descripción
+        pdf.cell(25, 8, str(r.get('fecha', ''))[:10], 1)
+        pdf.cell(40, 8, str(r.get('equipo', ''))[:25], 1)
+        pdf.cell(40, 8, str(r.get('tecnico', ''))[:25], 1)
+        pdf.cell(35, 8, str(r.get('area', ''))[:20], 1)
+        desc = str(r.get('descripcion', '')).replace('\n', ' ')
+        pdf.cell(100, 8, desc[:65], 1) # Limitamos caracteres para mantener la fila uniforme
+        pdf.cell(30, 8, str(r.get('estado', 'Pendiente')), 1, 1)
+        
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- ACCESO Y SEGURIDAD ---
+# --- LOGIN Y REGISTRO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Euro Control Ingenieria")
     tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro de Personal", "📧 Recuperar Cuenta"])
@@ -59,16 +70,14 @@ if not st.session_state['autenticado']:
         u = st.text_input("Usuario o Cédula", key="u_login").strip()
         p = st.text_input("Contraseña", type="password", key="p_login").strip()
         if st.button("Ingresar al Sistema"):
-            try:
-                res = supabase.table("usuarios").select("*").or_(f"usuario.eq.{u},cedula.eq.{u}").eq("clave", p).execute()
-                if res.data:
-                    st.session_state['autenticado'] = True
-                    st.session_state['usuario'] = res.data[0]['usuario']
-                    st.rerun()
-                else:
-                    st.error("Datos incorrectos.")
-            except Exception as e:
-                st.error(f"Error de conexión: {e}")
+            res = supabase.table("usuarios").select("*").or_(f"usuario.eq.{u},cedula.eq.{u}").eq("clave", p).execute()
+            if res.data:
+                st.session_state['autenticado'] = True
+                st.session_state['usuario'] = res.data[0]['usuario']
+                cookie_manager.set("euro_user_session", res.data[0]['usuario'])
+                st.rerun()
+            else:
+                st.error("Datos incorrectos.")
 
     with tab2:
         st.subheader("Formulario de Registro")
@@ -91,7 +100,7 @@ if not st.session_state['autenticado']:
                         "usuario": nombre_usuario_final, "cedula": cedula_id, 
                         "correo": correo_inst, "clave": clave_acc
                     }).execute()
-                    st.success(f"✅ ¡Registro Exitoso!")
+                    st.success("✅ ¡Registro Exitoso!")
                 except:
                     st.error("Error: Cédula ya registrada.")
             else:
@@ -99,11 +108,11 @@ if not st.session_state['autenticado']:
 
     with tab3:
         st.subheader("Recuperación de Credenciales")
-        email_buscar = st.text_input("Ingrese su correo electrónico registrado")
+        email_buscar = st.text_input("Ingrese su correo registrado")
         if st.button("Consultar Datos"):
             res = supabase.table("usuarios").select("*").eq("correo", email_buscar).execute()
             if res.data:
-                st.info(f"**Usuario:** {res.data[0]['usuario']}\n\n**Contraseña:** {res.data[0]['clave']}")
+                st.info(f"**Usuario:** {res.data[0]['usuario']}\n**Contraseña:** {res.data[0]['clave']}")
             else:
                 st.warning("Correo no encontrado.")
 
@@ -113,18 +122,21 @@ else:
     st.sidebar.write(f"👤 **Usuario:**\n{st.session_state['usuario']}")
     
     u_actual = st.session_state['usuario']
-    # DAIMARY SALAS y CARGOS ALTOS tienen permisos administrativos
-    es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
+    es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
+        try:
+            cookie_manager.delete("euro_user_session")
+        except:
+            pass
         st.rerun()
 
-    opciones_menu = ["➕ Registrar Actividad", "📋 Historial y Búsqueda"]
-    if es_admin_jerarquia:
-        opciones_menu.append("👥 Gestión de Personal")
+    menu_ops = ["➕ Registrar Actividad", "📋 Historial y Búsqueda"]
+    if es_admin:
+        menu_ops.append("👥 Gestión de Personal")
         
-    menu = st.sidebar.radio("Navegación", opciones_menu)
+    menu = st.sidebar.radio("Navegación", menu_ops)
 
     if menu == "➕ Registrar Actividad":
         st.header("📝 Registro de Trabajo")
@@ -149,7 +161,7 @@ else:
                         }).execute()
                         st.success("✅ Actividad guardada.")
                     except:
-                        st.error("Error al subir archivo.")
+                        st.error("Error al guardar.")
 
     if menu == "📋 Historial y Búsqueda":
         st.header("📋 Historial de Reportes")
@@ -160,61 +172,21 @@ else:
             lista_datos = res_db.data[::-1]
             if busqueda:
                 b = busqueda.lower()
-                lista_datos = [r for r in lista_datos if b in r['tecnico'].lower() or b in r['area'].lower() or b in r['equipo'].lower() or b in r.get('estado', '').lower()]
+                lista_datos = [r for r in lista_datos if b in str(r['tecnico']).lower() or b in str(r['area']).lower() or b in str(r['equipo']).lower()]
 
-            st.download_button("📥 Descargar PDF", data=generar_pdf(lista_datos), file_name="reporte_euro.pdf")
+            st.download_button("📥 Descargar PDF con Descripción", data=generar_pdf(lista_datos), file_name="reporte_euro_completo.pdf")
 
             for item in lista_datos:
                 status = item.get('estado', 'Pendiente')
-                color_tag = "🟠" if status == "Pendiente" else "🟢" if status == "Confirmado" else "🔴"
+                color = "🟠" if status == "Pendiente" else "🟢" if status == "Confirmado" else "🔴"
                 
-                with st.expander(f"{color_tag} {item['fecha']} | {item['equipo']} | {status}"):
+                with st.expander(f"{color} {item['fecha']} | {item['equipo']}"):
                     st.write(f"👷 **Técnico:** {item['tecnico']}")
                     st.write(f"📍 **Ubicación:** {item['area']}")
                     st.write(f"📝 **Descripción:** {item['descripcion']}")
                     if item.get('comentario_supervisor'):
                         st.info(f"💬 **Observación:** {item['comentario_supervisor']}")
                     
-                    if item['url_multimedia']:
+                    if item.get('url_multimedia'):
                         if ".mp4" in item['url_multimedia'].lower() or ".mov" in item['url_multimedia'].lower():
                             st.video(item['url_multimedia'])
-                        else:
-                            st.image(item['url_multimedia'], use_container_width=True)
-
-                    if es_admin_jerarquia:
-                        st.markdown("---")
-                        comentario_input = st.text_input("Comentario de revisión", key=f"in_{item['id']}")
-                        c1, c2, c3 = st.columns([1, 1, 2])
-                        if c1.button("✅ Confirmar", key=f"ok_{item['id']}"):
-                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
-                            st.rerun()
-                        if c2.button("❌ Observado", key=f"no_{item['id']}"):
-                            supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
-                            st.rerun()
-                        
-                        # ELIMINAR CON CONFIRMACIÓN
-                        if c3.checkbox("Confirmar para borrar", key=f"chk_{item['id']}"):
-                            if st.button("🗑️ Eliminar Reporte Definitivamente", key=f"del_{item['id']}"):
-                                supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
-                                st.rerun()
-        else:
-            st.info("No hay reportes.")
-
-    if menu == "👥 Gestión de Personal":
-        st.header("👥 Control de Usuarios")
-        res_users = supabase.table("usuarios").select("*").execute()
-        if res_users.data:
-            for u in res_users.data:
-                with st.container():
-                    col_u, col_b = st.columns([3, 1])
-                    col_u.write(f"👤 **{u['usuario']}** (C.I: {u['cedula']})")
-                    if u['usuario'] != st.session_state['usuario']:
-                        # ELIMINAR USUARIO CON CONFIRMACIÓN
-                        if col_b.checkbox("Eliminar", key=f"chk_u_{u['id']}"):
-                            if col_b.button("Confirmar Borrado", key=f"user_{u['id']}"):
-                                supabase.table("usuarios").delete().eq("id", u['id']).execute()
-                                st.success(f"Usuario {u['usuario']} eliminado.")
-                                st.rerun()
-                    else:
-                        col_b.write("*(Tú)*")
-                    st.divider()

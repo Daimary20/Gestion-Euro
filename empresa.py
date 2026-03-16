@@ -59,7 +59,6 @@ def generar_pdf(lista_reportes):
 # --- INTERFAZ DE ACCESO ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Euro Control Ingenieria")
-    # Restauradas las 3 pestañas originales
     tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro", "📧 Recuperar Cuenta"])
     
     with tab1:
@@ -97,12 +96,11 @@ if not st.session_state['autenticado']:
             res = supabase.table("usuarios").select("*").eq("correo", mail_rec).execute()
             if res.data:
                 st.info(f"**Usuario:** {res.data[0]['usuario']}  \n**Contraseña:** {res.data[0]['clave']}")
-            else:
-                st.warning("Correo no encontrado.")
+            else: st.warning("Correo no encontrado.")
 
 else:
     u_actual = st.session_state['usuario']
-    # DAIMARY SALAS tiene permisos de administración total
+    # DAIMARY SALAS y ADMIND tienen permisos totales
     es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     st.sidebar.title("Euro Control")
@@ -134,11 +132,24 @@ else:
                     st.success("Guardado.")
 
     if menu == "📋 Historial":
-        st.header("Historial")
+        st.header("Historial de Actividades")
+        
+        # --- BUSCADOR MULTI-VARIABLE ---
+        busqueda = st.text_input("🔍 Buscar por Área, Técnico o Equipo...")
+        
         res = supabase.table("reportes_euro").select("*").execute()
         if res.data:
             datos = res.data[::-1]
-            st.download_button("📥 Descargar PDF", data=generar_pdf(datos), file_name="reporte.pdf")
+            
+            # Aplicar filtro si hay búsqueda
+            if busqueda:
+                b = busqueda.lower()
+                datos = [d for d in datos if b in str(d.get('area','')).lower() or 
+                                            b in str(d.get('tecnico','')).lower() or 
+                                            b in str(d.get('equipo','')).lower()]
+            
+            st.download_button("📥 Descargar PDF (Filtro actual)", data=generar_pdf(datos), file_name="reporte_euro.pdf")
+            
             for i in datos:
                 with st.expander(f"{i['fecha']} | {i['equipo']} ({i.get('area', 'N/A')})"):
                     st.write(f"**Área:** {i.get('area', 'N/A')} | **Técnico:** {i['tecnico']}")
@@ -158,14 +169,13 @@ else:
                         if c2.button("❌ Observar", key=f"no_{i['id']}"):
                             supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
                             st.rerun()
-                        # OPCIÓN PARA BORRAR REPORTES (Daimary y Admins)
                         if c3.checkbox("Borrar reporte", key=f"del_chk_{i['id']}"):
                             if st.button("Confirmar Eliminación", key=f"btn_del_{i['id']}"):
                                 supabase.table("reportes_euro").delete().eq("id", i['id']).execute()
                                 st.rerun()
 
     if menu == "👥 Personal":
-        st.header("Personal")
+        st.header("Gestión de Personal")
         u_res = supabase.table("usuarios").select("*").execute()
         for us in u_res.data:
             c_u, c_b = st.columns([3, 1])

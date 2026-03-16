@@ -148,4 +148,55 @@ else:
         if res.data:
             datos = res.data[::-1]
             
-            # Filtro de
+            # Filtro de texto
+            if busqueda:
+                b = busqueda.lower()
+                datos = [d for d in datos if b in str(d.get('area','')).lower() or 
+                                            b in str(d.get('tecnico','')).lower() or 
+                                            b in str(d.get('equipo','')).lower()]
+            
+            # Filtro por Mes (La fecha se guarda como DD/MM/YYYY)
+            if mes_f != "Todos":
+                datos = [d for d in datos if d.get('fecha','')[3:5] == mes_f]
+            
+            # Filtro por Año
+            if año_f != "Todos":
+                datos = [d for d in datos if d.get('fecha','')[6:10] == año_f]
+            
+            st.download_button("📥 Descargar PDF (Con filtros)", data=generar_pdf(datos), file_name="reporte_euro.pdf")
+            
+            for i in datos:
+                with st.expander(f"{i['fecha']} | {i['equipo']} ({i.get('area', 'N/A')})"):
+                    st.write(f"**Área:** {i.get('area', 'N/A')} | **Técnico:** {i['tecnico']}")
+                    st.write(f"**Descripción:** {i['descripcion']}")
+                    if i['url_multimedia']:
+                        if ".mp4" in i['url_multimedia'].lower(): st.video(i['url_multimedia'])
+                        else: st.image(i['url_multimedia'], use_container_width=True)
+                    
+                    if es_admin:
+                        st.divider()
+                        obs = st.text_input("Observación", key=f"obs_{i['id']}")
+                        firma = f"{obs} (Por: {u_actual})"
+                        col1, col2, col3 = st.columns(3)
+                        if col1.button("✅ Confirmar", key=f"ok_{i['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
+                            st.rerun()
+                        if col2.button("❌ Observar", key=f"no_{i['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
+                            st.rerun()
+                        if col3.checkbox("Borrar reporte", key=f"del_chk_{i['id']}"):
+                            if st.button("Confirmar Eliminación", key=f"btn_del_{i['id']}"):
+                                supabase.table("reportes_euro").delete().eq("id", i['id']).execute()
+                                st.rerun()
+
+    if menu == "👥 Personal":
+        st.header("Gestión de Personal")
+        u_res = supabase.table("usuarios").select("*").execute()
+        for us in u_res.data:
+            c_u, c_b = st.columns([3, 1])
+            c_u.write(f"👤 {us['usuario']}")
+            if us['usuario'] != u_actual:
+                if c_b.button("Eliminar", key=f"del_u_{us.get('id', us['usuario'])}"):
+                    supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()
+                    st.rerun()
+            st.divider()

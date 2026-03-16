@@ -54,7 +54,8 @@ def generar_pdf(lista_reportes):
 # --- ACCESO Y SEGURIDAD ---
 if not st.session_state['autenticado']:
     st.title("🏗️ Euro Control Ingenieria")
-    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro de Personal", "📧 Ayuda"])
+    # Se restauró la pestaña de Recuperar Cuenta
+    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro de Personal", "📧 Recuperar Cuenta"])
     
     with tab1:
         u = st.text_input("Usuario o Cédula", key="u_login").strip()
@@ -74,10 +75,9 @@ if not st.session_state['autenticado']:
     with tab2:
         st.subheader("Formulario de Registro")
         nombre_completo = st.text_input("Nombre y Apellido")
-        # CARGOS ACTUALIZADOS CON LAS NUEVAS OPCIONES
         cargo_area = st.selectbox("Cargo / Área Técnica", [
-            "Operador de habitaciones", "Herrero", "Mecánica de cocina,
-            "Asistente de ingenieria", "Operador de planta", 
+            "Operador de habitaciones", "Herrería", "Mecánica de cocina", 
+            "Asistente de ingenieria", "Operador de planta", "Operador de planta"
             "Jefe de departamento", "Arquitecto", "Supervisor", "Otros"
         ])
         cedula_id = st.text_input("Cédula de Identidad")
@@ -99,12 +99,24 @@ if not st.session_state['autenticado']:
             else:
                 st.error("Código de autorización inválido.")
 
+    with tab3:
+        st.subheader("Recuperación de Credenciales")
+        email_buscar = st.text_input("Ingrese su correo electrónico registrado")
+        if st.button("Consultar Datos"):
+            try:
+                res = supabase.table("usuarios").select("*").eq("correo", email_buscar).execute()
+                if res.data:
+                    st.info(f"**Usuario:** {res.data[0]['usuario']}\n\n**Contraseña:** {res.data[0]['clave']}")
+                else:
+                    st.warning("Este correo no se encuentra en nuestra base de datos.")
+            except:
+                st.error("Ocurrió un error al consultar la base de datos.")
+
 else:
     # --- PANEL PRINCIPAL ---
     st.sidebar.title("Euro Control Ingenieria")
     st.sidebar.write(f"👤 **Usuario:**\n{st.session_state['usuario']}")
     
-    # PERMISOS ESPECIALES (Jerarquía)
     u_actual = st.session_state['usuario']
     es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe"])
 
@@ -157,9 +169,11 @@ else:
                         st.info(f"💬 **Observación:** {item['comentario_supervisor']}")
                     
                     if item['url_multimedia']:
-                        st.image(item['url_multimedia']) if ".mp4" not in item['url_multimedia'].lower() else st.video(item['url_multimedia'])
+                        if ".mp4" in item['url_multimedia'].lower() or ".mov" in item['url_multimedia'].lower():
+                            st.video(item['url_multimedia'])
+                        else:
+                            st.image(item['url_multimedia'], use_container_width=True)
 
-                    # PANEL DE SUPERVISIÓN Y ELIMINACIÓN RESTRINGIDO
                     if es_admin_jerarquia:
                         st.markdown("---")
                         comentario_input = st.text_input("Comentario de revisión", key=f"in_{item['id']}")

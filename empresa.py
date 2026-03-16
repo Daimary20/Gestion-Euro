@@ -81,7 +81,16 @@ if not st.session_state['autenticado']:
 
     with tab2:
         st.subheader("Nuevo Registro")
-        nu = st.text_input("Nombre de Usuario", key="u_reg").strip()
+        nu = st.text_input("Nombre y Apellido", key="u_reg", placeholder="Ej: Alejandro Gonzalez").strip()
+        # NUEVO: Selección de área
+        area_tecnica = st.selectbox("Área a la que pertenece", [
+            "Operador de Habitaciones", 
+            "Áreas Públicas", 
+            "Lavandería", 
+            "Mantenimiento General", 
+            "Electricidad",
+            "Plomería"
+        ])
         ci = st.text_input("Cédula de Identidad", key="c_reg").strip()
         ne = st.text_input("Correo Electrónico", key="e_reg").strip()
         np = st.text_input("Contraseña (mín. 6 carac.)", type="password", key="p_reg").strip()
@@ -100,12 +109,20 @@ if not st.session_state['autenticado']:
                 st.error("Código de autorización incorrecto")
             else:
                 try:
-                    check = supabase.table("usuarios").select("*").or_(f"usuario.eq.{nu},cedula.eq.{ci}").execute()
+                    # Formateamos el usuario para que incluya el área
+                    usuario_formateado = f"{nu} - {area_tecnica}"
+                    
+                    check = supabase.table("usuarios").select("*").or_(f"usuario.eq.{usuario_formateado},cedula.eq.{ci}").execute()
                     if check.data:
-                        st.error("Usuario o Cédula ya existen")
+                        st.error("Este usuario o cédula ya están registrados")
                     else:
-                        supabase.table("usuarios").insert({"usuario": nu, "cedula": ci, "correo": ne, "clave": np}).execute()
-                        st.success("✅ Registro exitoso. Inicie sesión.")
+                        supabase.table("usuarios").insert({
+                            "usuario": usuario_formateado, 
+                            "cedula": ci, 
+                            "correo": ne, 
+                            "clave": np
+                        }).execute()
+                        st.success(f"✅ Registrado como: {usuario_formateado}. Ya puede iniciar sesión.")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
@@ -126,7 +143,6 @@ else:
     st.sidebar.title("EURO Control")
     st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
     
-    # Cierre de sesión mejorado para evitar el KeyError
     if st.sidebar.button("🚪 Cerrar Sesión"):
         try:
             cookie_manager.delete("euro_user_session")
@@ -143,8 +159,8 @@ else:
         st.header("📝 Registro de Actividad")
         with st.form("f_trabajo", clear_on_submit=True):
             eq = st.text_input("Equipo / Maquinaria")
-            ar = st.text_input("Área")
-            de = st.text_area("Descripción")
+            ar = st.text_input("Área Específica (Habitación, Salón, etc.)")
+            de = st.text_area("Descripción del Trabajo")
             f = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
             if st.form_submit_button("Guardar"):
                 if eq and f:
@@ -157,15 +173,15 @@ else:
                             "fecha": f_actual, "tecnico": st.session_state['usuario'],
                             "area": ar, "equipo": eq, "descripcion": de, "url_multimedia": url
                         }).execute()
-                        st.success("✅ Guardado")
+                        st.success("✅ Trabajo guardado correctamente")
                     except:
-                        st.error("Error al subir")
+                        st.error("Error al subir la evidencia")
                 else:
-                    st.warning("Faltan datos obligatorios")
+                    st.warning("Debe indicar el equipo y subir una foto/video")
 
     if menu == "📋 Historial":
         st.header("📋 Historial de Trabajos")
-        busq = st.text_input("🔍 Buscar...")
+        busq = st.text_input("🔍 Buscar por Técnico, Área o Equipo...")
         try:
             res = supabase.table("reportes_euro").select("*").execute()
             if res.data:
@@ -176,22 +192,23 @@ else:
                 
                 if datos:
                     pdf_bytes = generar_pdf(datos)
-                    st.download_button("📥 PDF", data=pdf_bytes, file_name="reporte.pdf", mime="application/pdf")
+                    st.download_button("📥 Descargar Reporte PDF", data=pdf_bytes, file_name=f"reporte_{datetime.now().strftime('%d_%m')}.pdf", mime="application/pdf")
 
                 for r in datos:
                     with st.expander(f"📅 {r['fecha']} | {r['equipo']}"):
-                        st.write(f"👤 Técnico: {r['tecnico']}")
-                        st.write(f"🛠️ Descripción: {r['descripcion']}")
+                        st.write(f"👤 **Responsable:** {r['tecnico']}")
+                        st.write(f"📍 **Ubicación:** {r['area']}")
+                        st.write(f"🛠️ **Detalles:** {r['descripcion']}")
                         if r['url_multimedia']:
                             url = r['url_multimedia']
                             if ".mp4" in url.lower() or ".mov" in url.lower():
                                 st.video(url)
                             else:
                                 st.image(url, use_container_width=True)
-                        if st.button("🗑️ Eliminar", key=f"del_{r['id']}"):
+                        if st.button("🗑️ Eliminar Registro", key=f"del_{r['id']}"):
                             supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
                             st.rerun()
             else:
-                st.info("Sin registros")
+                st.info("Aún no hay trabajos registrados")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error al cargar historial: {e}")

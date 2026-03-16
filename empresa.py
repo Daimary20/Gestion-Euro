@@ -17,7 +17,6 @@ st.set_page_config(page_title="Euro Control Ingenieria", layout="wide", page_ico
 
 # --- GESTIÓN DE SESIÓN ---
 cookie_manager = stx.CookieManager()
-
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
@@ -30,34 +29,40 @@ if not st.session_state['autenticado']:
     except:
         pass
 
-# --- FUNCIONES ---
+# --- FUNCIÓN PDF ACTUALIZADA ---
 def generar_pdf(lista_reportes):
-    pdf = FPDF(orientation='L', unit='mm', format='A4') # Orientación horizontal para más espacio
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(280, 10, "EURO CONTROL INGENIERIA - REPORTE DE GESTION", ln=True, align="C")
+    pdf.cell(280, 10, "EURO CONTROL INGENIERIA - REPORTE DE GESTION DETALLADO", ln=True, align="C")
     pdf.ln(5)
     
-    # Encabezados con columna de Descripción
-    pdf.set_font("Arial", "B", 9)
+    # Encabezados
+    pdf.set_font("Arial", "B", 8)
     pdf.set_fill_color(230, 230, 230)
-    pdf.cell(25, 8, "Fecha", 1, 0, "C", True)
-    pdf.cell(40, 8, "Equipo", 1, 0, "C", True)
+    pdf.cell(22, 8, "Fecha", 1, 0, "C", True)
+    pdf.cell(35, 8, "Equipo", 1, 0, "C", True)
     pdf.cell(40, 8, "Responsable", 1, 0, "C", True)
-    pdf.cell(35, 8, "Ubicacion", 1, 0, "C", True)
-    pdf.cell(100, 8, "Descripcion", 1, 0, "C", True) # Nueva columna
-    pdf.cell(30, 8, "Estado", 1, 1, "C", True)
+    pdf.cell(30, 8, "Ubicacion", 1, 0, "C", True)
+    pdf.cell(70, 8, "Descripcion Tarea", 1, 0, "C", True)
+    pdf.cell(60, 8, "Seguimiento / Firma", 1, 0, "C", True) # Nueva columna firma
+    pdf.cell(20, 8, "Estado", 1, 1, "C", True)
     
-    pdf.set_font("Arial", "", 8)
+    pdf.set_font("Arial", "", 7)
     for r in lista_reportes:
-        # Usamos multi_cell o truncado para que no se desborde la descripción
-        pdf.cell(25, 8, str(r.get('fecha', ''))[:10], 1)
-        pdf.cell(40, 8, str(r.get('equipo', ''))[:25], 1)
+        pdf.cell(22, 8, str(r.get('fecha', ''))[:10], 1)
+        pdf.cell(35, 8, str(r.get('equipo', ''))[:22], 1)
         pdf.cell(40, 8, str(r.get('tecnico', ''))[:25], 1)
-        pdf.cell(35, 8, str(r.get('area', ''))[:20], 1)
+        pdf.cell(30, 8, str(r.get('area', ''))[:18], 1)
+        
         desc = str(r.get('descripcion', '')).replace('\n', ' ')
-        pdf.cell(100, 8, desc[:65], 1) # Limitamos caracteres para mantener la fila uniforme
-        pdf.cell(30, 8, str(r.get('estado', 'Pendiente')), 1, 1)
+        pdf.cell(70, 8, desc[:55], 1)
+        
+        # Mostrar quién firmó la revisión
+        firma = r.get('comentario_supervisor', 'Sin revisión')
+        pdf.cell(60, 8, str(firma)[:45], 1)
+        
+        pdf.cell(20, 8, str(r.get('estado', 'Pendiente')), 1, 1)
         
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
@@ -126,10 +131,8 @@ else:
 
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
-        try:
-            cookie_manager.delete("euro_user_session")
-        except:
-            pass
+        try: cookie_manager.delete("euro_user_session")
+        except: pass
         st.rerun()
 
     menu_ops = ["➕ Registrar Actividad", "📋 Historial y Búsqueda"]
@@ -165,7 +168,7 @@ else:
 
     if menu == "📋 Historial y Búsqueda":
         st.header("📋 Historial de Reportes")
-        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo o Estado...")
+        busqueda = st.text_input("🔍 Buscar por Técnico, Área, Equipo...")
         
         res_db = supabase.table("reportes_euro").select("*").execute()
         if res_db.data:
@@ -174,7 +177,7 @@ else:
                 b = busqueda.lower()
                 lista_datos = [r for r in lista_datos if b in str(r['tecnico']).lower() or b in str(r['area']).lower() or b in str(r['equipo']).lower()]
 
-            st.download_button("📥 Descargar PDF con Descripción", data=generar_pdf(lista_datos), file_name="reporte_euro_completo.pdf")
+            st.download_button("📥 Descargar Reporte PDF Detallado", data=generar_pdf(lista_datos), file_name="euro_control_auditoria.pdf")
 
             for item in lista_datos:
                 status = item.get('estado', 'Pendiente')
@@ -185,8 +188,44 @@ else:
                     st.write(f"📍 **Ubicación:** {item['area']}")
                     st.write(f"📝 **Descripción:** {item['descripcion']}")
                     if item.get('comentario_supervisor'):
-                        st.info(f"💬 **Observación:** {item['comentario_supervisor']}")
+                        st.info(f"💬 **Revisión:** {item['comentario_supervisor']}")
                     
+                    # SE MANTIENE IMAGEN/VIDEO EN LA APP
                     if item.get('url_multimedia'):
                         if ".mp4" in item['url_multimedia'].lower() or ".mov" in item['url_multimedia'].lower():
                             st.video(item['url_multimedia'])
+                        else:
+                            st.image(item['url_multimedia'], use_container_width=True)
+
+                    if es_admin:
+                        st.markdown("---")
+                        comentario = st.text_input("Comentario / Observación", key=f"rev_{item['id']}")
+                        c1, c2, c3 = st.columns([1,1,2])
+                        
+                        # AL CONFIRMAR U OBSERVAR, SE GUARDA LA "FIRMA" (QUIÉN LO HIZO)
+                        firma_texto = f"{comentario} (Por: {st.session_state['usuario']})"
+                        
+                        if c1.button("✅ Confirmar", key=f"ok_{item['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": firma_texto}).eq("id", item['id']).execute()
+                            st.rerun()
+                        if c2.button("❌ Observar", key=f"no_{item['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": firma_texto}).eq("id", item['id']).execute()
+                            st.rerun()
+                        if c3.checkbox("Borrar reporte", key=f"del_chk_{item['id']}"):
+                            if st.button("Confirmar Eliminación", key=f"btn_del_{item['id']}"):
+                                supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
+                                st.rerun()
+
+    if menu == "👥 Gestión de Personal":
+        st.header("👥 Control de Usuarios")
+        res_users = supabase.table("usuarios").select("*").execute()
+        if res_users.data:
+            for u in res_users.data:
+                col_u, col_b = st.columns([3, 1])
+                col_u.write(f"👤 **{u['usuario']}**")
+                if u['usuario'] != st.session_state['usuario']:
+                    if col_b.checkbox("Eliminar", key=f"chk_u_{u['id']}"):
+                        if col_b.button("Confirmar Borrado", key=f"user_{u['id']}"):
+                            supabase.table("usuarios").delete().eq("id", u['id']).execute()
+                            st.rerun()
+                st.divider()

@@ -29,7 +29,7 @@ if not st.session_state['autenticado']:
             st.session_state['usuario'] = user_saved
     except: pass
 
-# --- FUNCIÓN PDF MEJORADA (Maneja textos largos) ---
+# --- FUNCIÓN PDF MEJORADA ---
 def generar_pdf(lista_reportes):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -37,7 +37,6 @@ def generar_pdf(lista_reportes):
     pdf.cell(280, 10, "REPORTE DE GESTIÓN DETALLADO - EURO CONTROL INGENIERIA", ln=True, align="C")
     pdf.ln(5)
     
-    # Encabezados
     pdf.set_font("Arial", "B", 9)
     pdf.set_fill_color(240, 240, 240)
     headers = [("Fecha", 25), ("Equipo", 40), ("Área", 35), ("Responsable", 45), ("Descripción", 85), ("Seguimiento", 50)]
@@ -47,10 +46,8 @@ def generar_pdf(lista_reportes):
 
     pdf.set_font("Arial", "", 8)
     for r in lista_reportes:
-        # Altura dinámica
         x_start = pdf.get_x()
         y_start = pdf.get_y()
-        
         pdf.multi_cell(25, 8, str(r.get('fecha', ''))[:10], 1, "C")
         pdf.set_xy(x_start + 25, y_start)
         pdf.multi_cell(40, 8, str(r.get('equipo', ''))[:40], 1, "L")
@@ -59,14 +56,11 @@ def generar_pdf(lista_reportes):
         pdf.set_xy(x_start + 100, y_start)
         pdf.multi_cell(45, 8, str(r.get('tecnico', ''))[:35], 1, "L")
         pdf.set_xy(x_start + 145, y_start)
-        
         desc = str(r.get('descripcion', '')).replace('\n', ' ')
-        pdf.multi_cell(85, 8, desc[:120], 1, "L") # Soporta más texto
+        pdf.multi_cell(85, 8, desc[:120], 1, "L")
         pdf.set_xy(x_start + 230, y_start)
-        
         firma = r.get('comentario_supervisor', 'Pendiente')
         pdf.multi_cell(50, 8, str(firma)[:50], 1, "L")
-        
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # --- INTERFAZ DE ACCESO ---
@@ -79,6 +73,7 @@ if not st.session_state['autenticado']:
         p = st.text_input("Contraseña", type="password").strip()
         recordar = st.checkbox("Recordar sesión en este equipo")
         if st.button("Ingresar"):
+            # Filtra por el campo 'usuario' O por el campo 'cedula'
             res = supabase.table("usuarios").select("*").or_(f"usuario.eq.{u},cedula.eq.{u}").eq("clave", p).execute()
             if res.data:
                 st.session_state['autenticado'] = True
@@ -89,17 +84,30 @@ if not st.session_state['autenticado']:
             else: st.error("Error: Credenciales no válidas.")
 
     with tab2:
-        st.subheader("Registro")
-        nom = st.text_input("Nombre Completo")
+        st.subheader("Registro de Nuevo Personal")
+        nom_real = st.text_input("Nombre y Apellido Completo")
+        # --- NUEVA OPCIÓN SOLICITADA ---
+        user_alias = st.text_input("Cree un Nombre de Usuario (Ej: juan.perez)")
+        
         car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Arquitecto", "Operador de Planta", "Operador de Habitaciones", "Operador de Áreas Públicas", "Plomero", "Otros"])
-        ced = st.text_input("Cédula")
+        ced = st.text_input("Cédula de Identidad")
         cor = st.text_input("Correo")
-        cla = st.text_input("Clave", type="password")
+        cla = st.text_input("Clave de Acceso", type="password")
         cod = st.text_input("Código de Autorización", type="password")
+        
         if st.button("Crear Usuario"):
             if cod == CODIGO_REGISTRO_ADMIN:
-                supabase.table("usuarios").insert({"usuario": f"{nom} - {car}", "cedula": ced, "correo": cor, "clave": cla}).execute()
-                st.success("¡Registrado!")
+                if user_alias and ced and cla:
+                    # Guardamos el alias elegido por el usuario
+                    supabase.table("usuarios").insert({
+                        "usuario": user_alias, 
+                        "cedula": ced, 
+                        "correo": cor, 
+                        "clave": cla,
+                        "nombre_completo": f"{nom_real} - {car}" # Opcional: guardar el cargo aquí
+                    }).execute()
+                    st.success(f"¡Registrado! Ahora puedes entrar con tu usuario '{user_alias}' o con tu cédula.")
+                else: st.warning("Por favor rellene Usuario, Cédula y Clave.")
             else: st.error("Código Admin incorrecto.")
 
     with tab3:
@@ -112,6 +120,7 @@ if not st.session_state['autenticado']:
 else:
     # --- PANEL PRINCIPAL ---
     u_actual = st.session_state['usuario']
+    # Mantenemos la lógica de permisos basada en el usuario actual
     es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     st.sidebar.title("Euro Control")
@@ -145,8 +154,6 @@ else:
 
     if menu == "📋 Historial":
         st.header("📋 Panel de Seguimiento")
-        
-        # Filtros
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         busq = c1.text_input("🔍 Buscar por Área, Técnico o Equipo")
         mes_f = c2.selectbox("Mes", ["Todos"] + [f"{i:02d}" for i in range(1, 13)])
@@ -155,8 +162,6 @@ else:
         res = supabase.table("reportes_euro").select("*").execute()
         if res.data:
             datos = res.data[::-1]
-            
-            # Lógica de filtrado
             if busq:
                 b = busq.lower()
                 datos = [d for d in datos if b in str(d.get('area','')).lower() or b in str(d.get('tecnico','')).lower() or b in str(d.get('equipo','')).lower()]
@@ -165,7 +170,6 @@ else:
             if año_f != "Todos":
                 datos = [d for d in datos if d.get('fecha','')[6:10] == año_f]
 
-            # --- NUEVA MEJORA: KPIs ---
             k1, k2, k3 = st.columns(3)
             k1.metric("Pendientes", len([d for d in datos if d['estado'] == "Pendiente"]))
             k2.metric("Confirmados", len([d for d in datos if d['estado'] == "Confirmado"]))
@@ -180,7 +184,6 @@ else:
                     st.write(f"**Descripción:** {i['descripcion']}")
                     if i.get('comentario_supervisor'):
                         st.info(f"🗨️ {i['comentario_supervisor']}")
-                    
                     if i['url_multimedia']:
                         if ".mp4" in i['url_multimedia'].lower(): st.video(i['url_multimedia'])
                         else: st.image(i['url_multimedia'], use_container_width=True)
@@ -206,7 +209,7 @@ else:
         u_res = supabase.table("usuarios").select("*").execute()
         for us in u_res.data:
             c_u, c_b = st.columns([3, 1])
-            c_u.write(f"👤 {us['usuario']}")
+            c_u.write(f"👤 {us['usuario']} (C.I: {us.get('cedula', 'N/A')})")
             if us['usuario'] != u_actual:
                 if c_b.button("Eliminar", key=f"du_{us.get('id', us['usuario'])}"):
                     supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()

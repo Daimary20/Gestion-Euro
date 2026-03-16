@@ -96,11 +96,11 @@ if not st.session_state['autenticado']:
             res = supabase.table("usuarios").select("*").eq("correo", mail_rec).execute()
             if res.data:
                 st.info(f"**Usuario:** {res.data[0]['usuario']}  \n**Contraseña:** {res.data[0]['clave']}")
-            else: st.warning("Correo no encontrado.")
+            else:
+                st.warning("Correo no encontrado.")
 
 else:
     u_actual = st.session_state['usuario']
-    # DAIMARY SALAS y ADMIND tienen permisos totales
     es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
     st.sidebar.title("Euro Control")
@@ -134,54 +134,18 @@ else:
     if menu == "📋 Historial":
         st.header("Historial de Actividades")
         
-        # --- BUSCADOR MULTI-VARIABLE ---
-        busqueda = st.text_input("🔍 Buscar por Área, Técnico o Equipo...")
+        # --- FILTROS DE BÚSQUEDA ---
+        c1, c2, c3 = st.columns([2, 1, 1])
+        busqueda = c1.text_input("🔍 Buscar por Área, Técnico o Equipo...")
+        
+        meses = ["Todos", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
+        mes_f = c2.selectbox("Filtrar por Mes", meses)
+        
+        años = ["Todos"] + [str(y) for y in range(2024, 2031)]
+        año_f = c3.selectbox("Filtrar por Año", años)
         
         res = supabase.table("reportes_euro").select("*").execute()
         if res.data:
             datos = res.data[::-1]
             
-            # Aplicar filtro si hay búsqueda
-            if busqueda:
-                b = busqueda.lower()
-                datos = [d for d in datos if b in str(d.get('area','')).lower() or 
-                                            b in str(d.get('tecnico','')).lower() or 
-                                            b in str(d.get('equipo','')).lower()]
-            
-            st.download_button("📥 Descargar PDF (Filtro actual)", data=generar_pdf(datos), file_name="reporte_euro.pdf")
-            
-            for i in datos:
-                with st.expander(f"{i['fecha']} | {i['equipo']} ({i.get('area', 'N/A')})"):
-                    st.write(f"**Área:** {i.get('area', 'N/A')} | **Técnico:** {i['tecnico']}")
-                    st.write(f"**Descripción:** {i['descripcion']}")
-                    if i['url_multimedia']:
-                        if ".mp4" in i['url_multimedia'].lower(): st.video(i['url_multimedia'])
-                        else: st.image(i['url_multimedia'], use_container_width=True)
-                    
-                    if es_admin:
-                        st.divider()
-                        obs = st.text_input("Observación", key=f"obs_{i['id']}")
-                        firma = f"{obs} (Por: {u_actual})"
-                        c1, c2, c3 = st.columns(3)
-                        if c1.button("✅ Confirmar", key=f"ok_{i['id']}"):
-                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
-                            st.rerun()
-                        if c2.button("❌ Observar", key=f"no_{i['id']}"):
-                            supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
-                            st.rerun()
-                        if c3.checkbox("Borrar reporte", key=f"del_chk_{i['id']}"):
-                            if st.button("Confirmar Eliminación", key=f"btn_del_{i['id']}"):
-                                supabase.table("reportes_euro").delete().eq("id", i['id']).execute()
-                                st.rerun()
-
-    if menu == "👥 Personal":
-        st.header("Gestión de Personal")
-        u_res = supabase.table("usuarios").select("*").execute()
-        for us in u_res.data:
-            c_u, c_b = st.columns([3, 1])
-            c_u.write(f"👤 {us['usuario']}")
-            if us['usuario'] != u_actual:
-                if c_b.button("Eliminar", key=f"del_u_{us.get('id', us['usuario'])}"):
-                    supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()
-                    st.rerun()
-            st.divider()
+            # Filtro de

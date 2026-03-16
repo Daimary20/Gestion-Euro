@@ -5,21 +5,18 @@ from fpdf import FPDF
 import extra_streamlit_components as stx
 import re
 
-# --- 1. CONFIGURACIÓN ---
+# --- CONFIGURACIÓN ---
 URL_SUPABASE = "https://fhaxcedlmancswxnebjo.supabase.co"
 KEY_SUPABASE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoYXhjZWRsbWFuY3N3eG5lYmpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDU0MzgsImV4cCI6MjA4ODkyMTQzOH0.CnbDYu92BTjqMFSf0CBunNoE8XIBSW_gJyo2Dr7auIs"
-
 CODIGO_REGISTRO_ADMIN = "EURO2026" 
 
 if "supabase" not in st.session_state:
     st.session_state.supabase = create_client(URL_SUPABASE, KEY_SUPABASE)
 
 supabase = st.session_state.supabase
-
-# NOMBRE DE LA PESTAÑA DEL NAVEGADOR
 st.set_page_config(page_title="Euro Control Ingenieria", layout="wide", page_icon="🏗️")
 
-# --- GESTIÓN DE SESIÓN (COOKIES) ---
+# --- GESTIÓN DE SESIÓN ---
 cookie_manager = stx.CookieManager()
 
 if 'autenticado' not in st.session_state:
@@ -32,181 +29,187 @@ if not st.session_state['autenticado']:
         st.session_state['usuario'] = user_saved
 
 # --- FUNCIONES AUXILIARES ---
-def es_correo_valido(correo):
-    patron = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-    return re.match(patron, correo) is not None
-
 def generar_pdf(lista_reportes):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(190, 10, "EURO CONTROL INGENIERIA - REPORTE", ln=True, align="C")
+    pdf.cell(190, 10, "EURO CONTROL INGENIERIA - REPORTE DE GESTION", ln=True, align="C")
     pdf.ln(5)
     pdf.set_font("Arial", "B", 10)
     pdf.set_fill_color(230, 230, 230)
     pdf.cell(30, 8, "Fecha", 1, 0, "L", True)
-    pdf.cell(40, 8, "Equipo", 1, 0, "L", True)
-    pdf.cell(40, 8, "Tecnico", 1, 0, "L", True)
-    pdf.cell(80, 8, "Detalles", 1, 1, "L", True)
-    pdf.set_font("Arial", "", 9)
+    pdf.cell(45, 8, "Equipo", 1, 0, "L", True)
+    pdf.cell(45, 8, "Responsable", 1, 0, "L", True)
+    pdf.cell(30, 8, "Estado", 1, 0, "L", True)
+    pdf.cell(40, 8, "Ubicacion", 1, 1, "L", True)
+    pdf.set_font("Arial", "", 8)
     for r in lista_reportes:
         pdf.cell(30, 8, str(r.get('fecha', ''))[:10], 1)
-        pdf.cell(40, 8, str(r.get('equipo', ''))[:20], 1)
-        pdf.cell(40, 8, str(r.get('tecnico', ''))[:15], 1)
-        pdf.cell(80, 8, str(r.get('descripcion', ''))[:50], 1, 1)
+        pdf.cell(45, 8, str(r.get('equipo', ''))[:25], 1)
+        pdf.cell(45, 8, str(r.get('tecnico', ''))[:25], 1)
+        pdf.cell(30, 8, str(r.get('estado', 'Pendiente')), 1)
+        pdf.cell(40, 8, str(r.get('area', ''))[:20], 1, 1)
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- 2. ACCESO Y SEGURIDAD ---
+# --- ACCESO Y SEGURIDAD ---
 if not st.session_state['autenticado']:
-    st.title("🏗️ Euro Control Ingenieria") # NOMBRE EN LA INTERFAZ
-    tab1, tab2, tab3 = st.tabs(["🔐 Entrar", "📝 Registro Técnico", "📧 Recuperar"])
+    st.title("🏗️ Euro Control Ingenieria")
+    tab1, tab2, tab3 = st.tabs(["🔐 Iniciar Sesión", "📝 Registro de Personal", "📧 Ayuda"])
     
     with tab1:
         u = st.text_input("Usuario o Cédula", key="u_login").strip()
-        p = st.text_input("Clave", type="password", key="p_login").strip()
-        recordar = st.checkbox("Recordarme en este dispositivo")
-        
-        if st.button("Iniciar Sesión"):
+        p = st.text_input("Contraseña", type="password", key="p_login").strip()
+        if st.button("Ingresar al Sistema"):
             try:
                 res = supabase.table("usuarios").select("*").or_(f"usuario.eq.{u},cedula.eq.{u}").eq("clave", p).execute()
                 if res.data:
                     st.session_state['autenticado'] = True
                     st.session_state['usuario'] = res.data[0]['usuario']
-                    if recordar:
-                        cookie_manager.set("euro_user_session", res.data[0]['usuario'], key="set_cookie")
                     st.rerun()
                 else:
-                    st.error("Credenciales incorrectas")
+                    st.error("Datos incorrectos. Verifique su usuario o clave.")
             except Exception as e:
                 st.error(f"Error de conexión: {e}")
 
     with tab2:
-        st.subheader("Nuevo Registro")
-        nu = st.text_input("Nombre y Apellido", key="u_reg", placeholder="Ej: Alejandro Gonzalez").strip()
-        area_tecnica = st.selectbox("Área a la que pertenece", [
-            "Operador de Habitaciones", 
-            "Áreas Públicas", 
-            "Lavandería", 
-            "Mantenimiento General", 
-            "Electricidad",
-            "Plomería"
+        st.subheader("Formulario de Registro")
+        nombre_completo = st.text_input("Nombre y Apellido", placeholder="Ej: Juan Pérez")
+        cargo_area = st.selectbox("Cargo / Área Técnica", [
+            "Operador de Habitaciones", "Áreas Públicas", "Lavandería", 
+            "Mantenimiento General", "Electricidad", "Plomería", "Supervisor de Ingeniería"
         ])
-        ci = st.text_input("Cédula de Identidad", key="c_reg").strip()
-        ne = st.text_input("Correo Electrónico", key="e_reg").strip()
-        np = st.text_input("Contraseña (mín. 6 carac.)", type="password", key="p_reg").strip()
-        codigo_auth = st.text_input("Código de Autorización", type="password")
+        cedula_id = st.text_input("Cédula de Identidad (Solo números)")
+        correo_inst = st.text_input("Correo Electrónico")
+        clave_acc = st.text_input("Cree una Contraseña (mín. 6 caracteres)", type="password")
+        auth_code = st.text_input("Código de Autorización de la Empresa", type="password")
         
-        if st.button("Completar Registro"):
-            if not nu or not ci or not ne or not np:
-                st.warning("Complete todos los campos")
-            elif not ci.isdigit():
-                st.error("La Cédula debe ser numérica")
-            elif not es_correo_valido(ne):
-                st.error("Correo no válido")
-            elif len(np) < 6:
-                st.error("Clave muy corta")
-            elif codigo_auth != CODIGO_REGISTRO_ADMIN:
-                st.error("Código de autorización incorrecto")
-            else:
+        if st.button("Registrar Nuevo Usuario"):
+            if auth_code == CODIGO_REGISTRO_ADMIN:
+                nombre_usuario_final = f"{nombre_completo} - {cargo_area}"
                 try:
-                    usuario_formateado = f"{nu} - {area_tecnica}"
-                    check = supabase.table("usuarios").select("*").or_(f"usuario.eq.{usuario_formateado},cedula.eq.{ci}").execute()
-                    if check.data:
-                        st.error("Este usuario o cédula ya están registrados")
-                    else:
-                        supabase.table("usuarios").insert({
-                            "usuario": usuario_formateado, 
-                            "cedula": ci, 
-                            "correo": ne, 
-                            "clave": np
-                        }).execute()
-                        st.success(f"✅ Registrado con éxito. Ya puede iniciar sesión.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    with tab3:
-        email_b = st.text_input("Correo registrado", key="e_rec")
-        if st.button("Recuperar Datos"):
-            try:
-                res = supabase.table("usuarios").select("*").eq("correo", email_b).execute()
-                if res.data:
-                    st.info(f"Usuario: {res.data[0]['usuario']} | Clave: {res.data[0]['clave']}")
-                else:
-                    st.warning("Ese correo no está registrado en el sistema")
-            except:
-                st.error("Error en base de datos")
+                    supabase.table("usuarios").insert({
+                        "usuario": nombre_usuario_final, 
+                        "cedula": cedula_id, 
+                        "correo": correo_inst, 
+                        "clave": clave_acc
+                    }).execute()
+                    st.success(f"✅ ¡Registro Exitoso! Bienvenido, {nombre_usuario_final}.")
+                except:
+                    st.error("Error: El número de cédula ya se encuentra registrado.")
+            else:
+                st.error("Código de autorización inválido.")
 
 else:
-    # --- 3. PANEL PRINCIPAL ---
-    st.sidebar.title("Euro Control Ingenieria") # NOMBRE EN EL MENÚ LATERAL
-    st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
+    # --- PANEL PRINCIPAL ---
+    st.sidebar.title("Euro Control Ingenieria")
+    st.sidebar.write(f"👤 **Usuario Activo:**\n{st.session_state['usuario']}")
     
-    if st.sidebar.button("🚪 Cerrar Sesión"):
+    # Verificación de rango de Supervisor
+    es_supervisor = "Supervisor" in st.session_state['usuario']
+
+    if st.sidebar.button("🚪 Cerrar Sesión Segura"):
         try:
             cookie_manager.delete("euro_user_session")
         except:
             pass
         st.session_state['autenticado'] = False
-        if 'usuario' in st.session_state:
-            del st.session_state['usuario']
         st.rerun()
 
-    menu = st.sidebar.radio("Navegación", ["➕ Registrar Trabajo", "📋 Historial"])
+    menu = st.sidebar.radio("Navegación Principal", ["➕ Registrar Actividad", "📋 Historial y Revisión"])
 
-    if menu == "➕ Registrar Trabajo":
-        st.header("📝 Registro de Actividad")
-        with st.form("f_trabajo", clear_on_submit=True):
-            eq = st.text_input("Equipo / Maquinaria")
-            ar = st.text_input("Área Específica (Habitación, Salón, etc.)")
-            de = st.text_area("Descripción del Trabajo")
-            f = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
-            if st.form_submit_button("Guardar"):
-                if eq and f:
+    if menu == "➕ Registrar Actividad":
+        st.header("📝 Registro de Trabajo Diario")
+        with st.form("form_registro", clear_on_submit=True):
+            equipo_maq = st.text_input("Equipo o Maquinaria intervenida")
+            ubicacion_exacta = st.text_input("Ubicación / Área (Ej: Hab 402, Cocina)")
+            descripcion_tarea = st.text_area("Descripción detallada del trabajo realizado")
+            evidencia_file = st.file_uploader("Adjuntar Evidencia (Foto o Video)", type=["jpg","png","jpeg","mp4","mov"])
+            
+            if st.form_submit_button("Guardar Reporte"):
+                if equipo_maq and evidencia_file:
                     try:
-                        f_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        fname = f"{datetime.now().strftime('%Y%m%d%H%M')}_{f.name}"
-                        supabase.storage.from_("evidencias").upload(fname, f.getvalue())
-                        url = supabase.storage.from_("evidencias").get_public_url(fname)
+                        timestamp = datetime.now().strftime('%Y%m%d%H%M')
+                        nombre_archivo = f"{timestamp}_{evidencia_file.name}"
+                        supabase.storage.from_("evidencias").upload(nombre_archivo, evidencia_file.getvalue())
+                        url_file = supabase.storage.from_("evidencias").get_public_url(nombre_archivo)
+                        
                         supabase.table("reportes_euro").insert({
-                            "fecha": f_actual, "tecnico": st.session_state['usuario'],
-                            "area": ar, "equipo": eq, "descripcion": de, "url_multimedia": url
+                            "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            "tecnico": st.session_state['usuario'],
+                            "area": ubicacion_exacta, 
+                            "equipo": equipo_maq, 
+                            "descripcion": descripcion_tarea, 
+                            "url_multimedia": url_file,
+                            "estado": "Pendiente"
                         }).execute()
-                        st.success("✅ Trabajo guardado correctamente")
+                        st.success("✅ Actividad registrada correctamente en la base de datos.")
                     except:
-                        st.error("Error al subir la evidencia")
+                        st.error("Error al procesar el archivo. Intente con una imagen más pequeña.")
                 else:
-                    st.warning("Debe indicar el equipo y subir una foto/video")
+                    st.warning("Por favor, complete el nombre del equipo y adjunte una evidencia.")
 
-    if menu == "📋 Historial":
-        st.header("📋 Historial de Trabajos")
-        busq = st.text_input("🔍 Buscar por Técnico, Área o Equipo...")
-        try:
-            res = supabase.table("reportes_euro").select("*").execute()
-            if res.data:
-                datos = res.data[::-1]
-                if busq:
-                    b = busq.lower()
-                    datos = [r for r in datos if b in r['tecnico'].lower() or b in r['area'].lower() or b in (r['equipo'].lower() if r['equipo'] else "") or b in r['fecha'].lower()]
+    if menu == "📋 Historial y Revisión":
+        st.header("📋 Historial de Reportes")
+        busqueda_global = st.text_input("🔍 Buscar por técnico, equipo o estado...")
+        
+        res_db = supabase.table("reportes_euro").select("*").execute()
+        if res_db.data:
+            lista_datos = res_db.data[::-1]
+            
+            if busqueda_global:
+                bg = busqueda_global.lower()
+                lista_datos = [r for r in lista_datos if bg in r['tecnico'].lower() or bg in r['equipo'].lower() or bg in r.get('estado', '').lower()]
+
+            if lista_datos:
+                st.download_button("📥 Descargar Reporte Consolidado (PDF)", 
+                                 data=generar_pdf(lista_datos), 
+                                 file_name=f"reporte_ingenieria_{datetime.now().strftime('%d_%m')}.pdf")
+
+            for item in lista_datos:
+                status = item.get('estado', 'Pendiente')
+                # Indicadores visuales de estado
+                color_tag = "🟠" if status == "Pendiente" else "🟢" if status == "Confirmado" else "🔴"
                 
-                if datos:
-                    pdf_bytes = generar_pdf(datos)
-                    st.download_button("📥 Descargar Reporte PDF", data=pdf_bytes, file_name=f"reporte_euro.pdf", mime="application/pdf")
-
-                for r in datos:
-                    with st.expander(f"📅 {r['fecha']} | {r['equipo']}"):
-                        st.write(f"👤 **Responsable:** {r['tecnico']}")
-                        st.write(f"📍 **Ubicación:** {r['area']}")
-                        st.write(f"🛠️ **Detalles:** {r['descripcion']}")
-                        if r['url_multimedia']:
-                            url = r['url_multimedia']
-                            if ".mp4" in url.lower() or ".mov" in url.lower():
-                                st.video(url)
+                with st.expander(f"{color_tag} {item['fecha']} | {item['equipo']} | {status}"):
+                    col_info, col_media = st.columns([1, 1])
+                    
+                    with col_info:
+                        st.write(f"👷 **Técnico:** {item['tecnico']}")
+                        st.write(f"📍 **Ubicación:** {item['area']}")
+                        st.write(f"📝 **Descripción:** {item['descripcion']}")
+                        if item.get('comentario_supervisor'):
+                            st.info(f"💬 **Nota del Supervisor:** {item['comentario_supervisor']}")
+                    
+                    with col_media:
+                        if item['url_multimedia']:
+                            if ".mp4" in item['url_multimedia'].lower() or ".mov" in item['url_multimedia'].lower():
+                                st.video(item['url_multimedia'])
                             else:
-                                st.image(url, use_container_width=True)
-                        if st.button("🗑️ Eliminar Registro", key=f"del_{r['id']}"):
-                            supabase.table("reportes_euro").delete().eq("id", r['id']).execute()
+                                st.image(item['url_multimedia'], use_container_width=True)
+
+                    # PANEL EXCLUSIVO PARA SUPERVISORES
+                    if es_supervisor:
+                        st.markdown("---")
+                        st.subheader("⚡ Panel de Supervisión")
+                        comentario_input = st.text_input("Escribir observación o comentario", key=f"input_{item['id']}")
+                        btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
+                        
+                        if btn_col1.button("✅ Confirmar", key=f"btn_ok_{item['id']}"):
+                            supabase.table("reportes_euro").update({
+                                "estado": "Confirmado", 
+                                "comentario_supervisor": comentario_input
+                            }).eq("id", item['id']).execute()
                             st.rerun()
-            else:
-                st.info("Aún no hay trabajos registrados")
-        except Exception as e:
-            st.error(f"Error al cargar historial: {e}")
+                            
+                        if btn_col2.button("❌ Observado", key=f"btn_no_{item['id']}"):
+                            supabase.table("reportes_euro").update({
+                                "estado": "Observado", 
+                                "comentario_supervisor": comentario_input
+                            }).eq("id", item['id']).execute()
+                            st.rerun()
+                            
+                        if btn_col3.button("🗑️ Eliminar Reporte", key=f"btn_del_{item['id']}"):
+                            supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
+                            st.rerun()
+        else:
+            st.info("No se encontraron reportes registrados actualmente.")

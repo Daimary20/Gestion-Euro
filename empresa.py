@@ -91,7 +91,7 @@ if not st.session_state['autenticado']:
     with tab2:
         st.subheader("Registro")
         nom = st.text_input("Nombre Completo")
-        car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Otros"])
+        car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Arquitecto", "Operador de Planta", "Operador de Habitaciones", "Operador de Áreas Públicas", "Plomero", "Otros"])
         ced = st.text_input("Cédula")
         cor = st.text_input("Correo")
         cla = st.text_input("Clave", type="password")

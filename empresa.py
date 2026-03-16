@@ -74,10 +74,11 @@ if not st.session_state['autenticado']:
     with tab2:
         st.subheader("Formulario de Registro")
         nombre_completo = st.text_input("Nombre y Apellido")
-        # CARGOS ACTUALIZADOS
+        # CARGOS ACTUALIZADOS CON LAS NUEVAS OPCIONES
         cargo_area = st.selectbox("Cargo / Área Técnica", [
             "Operador de habitaciones", "Herrería", "Mecánica de cocina", 
-            "Asistente", "Jefe de departamento", "Ingeniero", "Arquitecto", "Supervisor", "Otros"
+            "Asistente", "Asistente de ingenieria", "Operador de planta", 
+            "Jefe de departamento", "Ingeniero", "Arquitecto", "Supervisor", "Otros"
         ])
         cedula_id = st.text_input("Cédula de Identidad")
         correo_inst = st.text_input("Correo Electrónico")
@@ -103,7 +104,7 @@ else:
     st.sidebar.title("Euro Control Ingenieria")
     st.sidebar.write(f"👤 **Usuario:**\n{st.session_state['usuario']}")
     
-    # PERMISOS ESPECIALES (Supervisor, Arquitecto, Ingeniero, Jefe)
+    # PERMISOS ESPECIALES (Jerarquía)
     u_actual = st.session_state['usuario']
     es_admin_jerarquia = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe"])
 
@@ -172,7 +173,6 @@ else:
                             supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": comentario_input}).eq("id", item['id']).execute()
                             st.rerun()
                             
-                        # BOTÓN DE ELIMINACIÓN SOLO PARA JERARQUÍA ALTA
                         if c3.button("🗑️ Eliminar Reporte", key=f"del_{item['id']}"):
                             supabase.table("reportes_euro").delete().eq("id", item['id']).execute()
                             st.rerun()

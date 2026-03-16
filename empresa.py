@@ -16,7 +16,8 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state.supabase
 
-st.set_page_config(page_title="EURO Gestión Cloud", layout="wide", page_icon="🏗️")
+# NOMBRE DE LA PESTAÑA DEL NAVEGADOR
+st.set_page_config(page_title="Euro Control Ingenieria", layout="wide", page_icon="🏗️")
 
 # --- GESTIÓN DE SESIÓN (COOKIES) ---
 cookie_manager = stx.CookieManager()
@@ -39,7 +40,7 @@ def generar_pdf(lista_reportes):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(190, 10, "EURO GESTION - REPORTE DE TRABAJOS", ln=True, align="C")
+    pdf.cell(190, 10, "EURO CONTROL INGENIERIA - REPORTE", ln=True, align="C")
     pdf.ln(5)
     pdf.set_font("Arial", "B", 10)
     pdf.set_fill_color(230, 230, 230)
@@ -57,7 +58,7 @@ def generar_pdf(lista_reportes):
 
 # --- 2. ACCESO Y SEGURIDAD ---
 if not st.session_state['autenticado']:
-    st.title("🏗️ EURO Control")
+    st.title("🏗️ Euro Control Ingenieria") # NOMBRE EN LA INTERFAZ
     tab1, tab2, tab3 = st.tabs(["🔐 Entrar", "📝 Registro Técnico", "📧 Recuperar"])
     
     with tab1:
@@ -82,7 +83,6 @@ if not st.session_state['autenticado']:
     with tab2:
         st.subheader("Nuevo Registro")
         nu = st.text_input("Nombre y Apellido", key="u_reg", placeholder="Ej: Alejandro Gonzalez").strip()
-        # NUEVO: Selección de área
         area_tecnica = st.selectbox("Área a la que pertenece", [
             "Operador de Habitaciones", 
             "Áreas Públicas", 
@@ -109,9 +109,7 @@ if not st.session_state['autenticado']:
                 st.error("Código de autorización incorrecto")
             else:
                 try:
-                    # Formateamos el usuario para que incluya el área
                     usuario_formateado = f"{nu} - {area_tecnica}"
-                    
                     check = supabase.table("usuarios").select("*").or_(f"usuario.eq.{usuario_formateado},cedula.eq.{ci}").execute()
                     if check.data:
                         st.error("Este usuario o cédula ya están registrados")
@@ -122,7 +120,7 @@ if not st.session_state['autenticado']:
                             "correo": ne, 
                             "clave": np
                         }).execute()
-                        st.success(f"✅ Registrado como: {usuario_formateado}. Ya puede iniciar sesión.")
+                        st.success(f"✅ Registrado con éxito. Ya puede iniciar sesión.")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
@@ -140,7 +138,7 @@ if not st.session_state['autenticado']:
 
 else:
     # --- 3. PANEL PRINCIPAL ---
-    st.sidebar.title("EURO Control")
+    st.sidebar.title("Euro Control Ingenieria") # NOMBRE EN EL MENÚ LATERAL
     st.sidebar.write(f"👤 Técnico: **{st.session_state['usuario']}**")
     
     if st.sidebar.button("🚪 Cerrar Sesión"):
@@ -192,7 +190,7 @@ else:
                 
                 if datos:
                     pdf_bytes = generar_pdf(datos)
-                    st.download_button("📥 Descargar Reporte PDF", data=pdf_bytes, file_name=f"reporte_{datetime.now().strftime('%d_%m')}.pdf", mime="application/pdf")
+                    st.download_button("📥 Descargar Reporte PDF", data=pdf_bytes, file_name=f"reporte_euro.pdf", mime="application/pdf")
 
                 for r in datos:
                     with st.expander(f"📅 {r['fecha']} | {r['equipo']}"):

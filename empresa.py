@@ -227,3 +227,10 @@ else:
                     supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()
                     st.rerun()
             st.divider()
+            
+with st.sidebar:
+    # st.image("logo_euro.png", width=150) # Si tienes un logo
+    st.title("Euro Control")
+    st.markdown(f"**Sesión activa:** {u_actual}")
+    st.progress(100) # Una línea visual divisoria
+    st.divider()

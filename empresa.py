@@ -89,7 +89,7 @@ if not st.session_state['autenticado']:
         # --- NUEVA OPCIÓN SOLICITADA ---
         user_alias = st.text_input("Cree un Nombre de Usuario (Ej: juan.perez)")
         
-        car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Arquitecto", "Operador de Planta", "Operador de Habitaciones", "Operador de Áreas Públicas", "Plomero", "Técnico de Ascensores", "Técnico Mecánica General", "Tecnico Cocina Y Lavandería", "Otros"])
+        car = st.selectbox("Cargo", ["Asistente de ingenieria", "Supervisor", "Ingeniero", "Técnico", "Arquitecto", "Operador de Planta", "Operador de Habitaciones", "Operador de Áreas Públicas", "Plomero", "Técnico de Ascensores", "Técnico Mecánica General", "Técnico Mec. Cocina Y Lavandería", "Otros"])
         ced = st.text_input("Cédula de Identidad")
         cor = st.text_input("Correo")
         cla = st.text_input("Clave de Acceso", type="password")

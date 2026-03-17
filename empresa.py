@@ -10,7 +10,7 @@ KEY_SUPABASE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 # NUEVOS CÓDIGOS DE ACCESO
 CODIGO_PERSONAL = "EURO2026"
-CODIGO_JEFES = "ADMIN777" # Código exclusivo para Supervisor, Arquitecto e Ingeniero
+CODIGO_JEFES = "ADMIN777" 
 
 if "supabase" not in st.session_state:
     st.session_state.supabase = create_client(URL_SUPABASE, KEY_SUPABASE)
@@ -28,8 +28,11 @@ if not st.session_state['autenticado']:
     try:
         user_saved = cookie_manager.get(cookie="euro_user_session")
         if user_saved:
-            st.session_state['autenticado'] = True
-            st.session_state['usuario'] = user_saved
+            res_u = supabase.table("usuarios").select("*").eq("usuario", user_saved).execute()
+            if res_u.data:
+                st.session_state['autenticado'] = True
+                st.session_state['usuario'] = user_saved
+                st.session_state['cargo_user'] = res_u.data[0].get('cargo', 'Técnico')
     except: pass
 
 # --- FUNCIÓN PDF ---
@@ -79,6 +82,7 @@ if not st.session_state['autenticado']:
             if res.data:
                 st.session_state['autenticado'] = True
                 st.session_state['usuario'] = res.data[0]['usuario']
+                st.session_state['cargo_user'] = res.data[0].get('cargo', 'Técnico')
                 cookie_manager.set("euro_user_session", res.data[0]['usuario'])
                 st.rerun()
             else: st.error("Error: Credenciales no válidas.")
@@ -93,21 +97,20 @@ if not st.session_state['autenticado']:
         cod = st.text_input("Código de Autorización", type="password")
         
         if st.button("Finalizar Registro"):
-            # LÓGICA DE CÓDIGOS
             es_jefe = (cod == CODIGO_JEFES)
             es_personal = (cod == CODIGO_PERSONAL)
 
             if es_jefe or es_personal:
-                # Si es jefe, añadimos una marca al nombre de usuario para que el sistema lo reconozca como admin
                 final_user = f"{ced} (Admin)" if es_jefe else ced
                 
                 supabase.table("usuarios").insert({
                     "usuario": final_user, 
                     "cedula": ced, 
                     "correo": cor, 
-                    "clave": cla
+                    "clave": cla,
+                    "cargo": car # ESTO REQUIERE LA COLUMNA EN SUPABASE
                 }).execute()
-                st.success(f"¡Registrado con éxito! Inicie sesión con su cédula: {ced}")
+                st.success(f"¡Registrado como {car}! Inicie sesión con su cédula.")
             else:
                 st.error("Código de autorización inválido.")
 
@@ -122,12 +125,16 @@ if not st.session_state['autenticado']:
 else:
     # --- PANEL PRINCIPAL ---
     u_actual = st.session_state['usuario']
+    cargo_actual = st.session_state.get('cargo_user', 'Técnico')
     
-    # Lógica de Admin: Acceso si es CMorales o si el usuario tiene la marca "(Admin)"
-    es_admin = any(x in u_actual.lower() for x in ["daimary salas", "cmorales", "(admin)"])
+    # Lógica de Admin: Acceso por nombre, marca (Admin) o cargo (Arquitecto/Ingeniero)
+    admin_list = ["daimary salas", "cmorales", "(admin)", "arquitecto", "ingeniero", "supervisor"]
+    es_admin = any(x in u_actual.lower() or x in cargo_actual.lower() for x in admin_list)
 
     st.sidebar.title("Euro Control")
     st.sidebar.write(f"👤 {u_actual}")
+    st.sidebar.info(f"💼 Cargo: {cargo_actual}") # Se refleja el cargo en la interfaz
+    
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state['autenticado'] = False
         cookie_manager.delete("euro_user_session")
@@ -149,7 +156,8 @@ else:
                     url = supabase.storage.from_("evidencias").get_public_url(fn)
                     supabase.table("reportes_euro").insert({
                         "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                        "tecnico": u_actual, "area": ar, "equipo": eq, "descripcion": ds, "url_multimedia": url, "estado": "Pendiente"
+                        "tecnico": f"{u_actual} ({cargo_actual})", # Aquí se refleja el cargo en el reporte
+                        "area": ar, "equipo": eq, "descripcion": ds, "url_multimedia": url, "estado": "Pendiente"
                     }).execute()
                     st.success("Reporte enviado.")
 
@@ -161,21 +169,22 @@ else:
             st.download_button("📥 PDF Auditoría", data=generar_pdf(datos), file_name="reporte.pdf")
             for i in datos:
                 with st.expander(f"{i['estado']} | {i['fecha']} | {i['equipo']}"):
-                    st.write(f"Técnico: {i['tecnico']}")
-                    st.write(f"Descripción: {i['descripcion']}")
+                    st.write(f"**Responsable:** {i['tecnico']}")
+                    st.write(f"**Descripción:** {i['descripcion']}")
                     if i['url_multimedia']: st.image(i['url_multimedia'])
                     
                     if es_admin:
                         obs = st.text_input("Firma/Comentario", key=f"f_{i['id']}")
                         if st.button("✅ Aprobar", key=f"ap_{i['id']}"):
-                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": obs}).eq("id", i['id']).execute()
+                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": f"{obs} (Por: {u_actual})"}).eq("id", i['id']).execute()
                             st.rerun()
 
     if menu == "👥 Personal":
         st.header("👥 Gestión de Usuarios")
         u_res = supabase.table("usuarios").select("*").execute()
         for us in u_res.data:
-            st.write(f"👤 {us['usuario']} - C.I: {us['cedula']}")
+            st.write(f"👤 {us['usuario']} - **Cargo:** {us.get('cargo', 'N/A')} - C.I: {us['cedula']}")
             if st.button("Eliminar", key=f"del_{us['usuario']}"):
                 supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()
                 st.rerun()
+            st.divider()

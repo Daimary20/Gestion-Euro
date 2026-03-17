@@ -29,7 +29,7 @@ if not st.session_state['autenticado']:
             st.session_state['usuario'] = user_saved
     except: pass
 
-# --- FUNCIÓN PDF ---
+# --- FUNCIÓN PDF MEJORADA ---
 def generar_pdf(lista_reportes):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -95,14 +95,14 @@ if not st.session_state['autenticado']:
         if st.button("Crear Usuario"):
             if cod == CODIGO_REGISTRO_ADMIN:
                 if user_alias and ced and cla:
-                    # HE QUITADO 'nombre_completo' porque no existe en tu tabla de Supabase
+                    # CORRECCIÓN: Eliminamos 'nombre_completo' porque no existe en tu tabla 'usuarios'
                     supabase.table("usuarios").insert({
                         "usuario": user_alias, 
                         "cedula": ced, 
                         "correo": cor, 
                         "clave": cla
                     }).execute()
-                    st.success(f"¡Registrado! Ahora puedes entrar con tu usuario '{user_alias}'.")
+                    st.success(f"¡Registrado! Ahora puedes entrar con tu usuario '{user_alias}' o con tu cédula.")
                 else: st.warning("Por favor rellene Usuario, Cédula y Clave.")
             else: st.error("Código Admin incorrecto.")
 
@@ -124,12 +124,12 @@ if not st.session_state['autenticado']:
             if st.button("Actualizar Contraseña"):
                 if nueva_p == confirm_p and nueva_p != "":
                     supabase.table("usuarios").update({"clave": nueva_p}).eq("usuario", st.session_state['reset_user']).execute()
-                    st.success("✅ Contraseña actualizada correctamente.")
+                    st.success("✅ Contraseña actualizada correctamente. Ya puede iniciar sesión.")
                     del st.session_state['reset_user']
-                else: st.warning("Las contraseñas no coinciden.")
+                else: st.warning("Las contraseñas no coinciden o están vacías.")
 
 else:
-    # --- PANEL PRINCIPAL (Igual al anterior pero usando ID para acciones) ---
+    # --- PANEL PRINCIPAL ---
     u_actual = st.session_state['usuario']
     es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
 
@@ -150,7 +150,7 @@ else:
             eq = col_a.text_input("Equipo / Máquina")
             ar = col_b.text_input("Área de pertenencia")
             ds = st.text_area("Descripción detallada")
-            ev = st.file_uploader("Evidencia", type=["jpg","png","jpeg","mp4","mov"])
+            ev = st.file_uploader("Evidencia (Foto o Video)", type=["jpg","png","jpeg","mp4","mov"])
             if st.form_submit_button("Enviar Reporte"):
                 if eq and ev:
                     fn = f"{datetime.now().strftime('%H%M%S')}_{ev.name}"
@@ -160,30 +160,70 @@ else:
                         "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
                         "tecnico": u_actual, "area": ar, "equipo": eq, "descripcion": ds, "url_multimedia": url, "estado": "Pendiente"
                     }).execute()
-                    st.success("✅ Reporte guardado.")
+                    st.success("✅ Reporte guardado con éxito.")
 
     if menu == "📋 Historial":
-        st.header("📋 Historial")
+        st.header("📋 Panel de Seguimiento")
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+        busq = c1.text_input("🔍 Buscar por Área, Técnico o Equipo")
+        mes_f = c2.selectbox("Mes", ["Todos"] + [f"{i:02d}" for i in range(1, 13)])
+        año_f = c3.selectbox("Año", ["Todos"] + [str(y) for y in range(2024, 2027)])
+        
         res = supabase.table("reportes_euro").select("*").execute()
         if res.data:
             datos = res.data[::-1]
+            if busq:
+                b = busq.lower()
+                datos = [d for d in datos if b in str(d.get('area','')).lower() or b in str(d.get('tecnico','')).lower() or b in str(d.get('equipo','')).lower()]
+            if mes_f != "Todos":
+                datos = [d for d in datos if d.get('fecha','')[3:5] == mes_f]
+            if año_f != "Todos":
+                datos = [d for d in datos if d.get('fecha','')[6:10] == año_f]
+
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Pendientes", len([d for d in datos if d['estado'] == "Pendiente"]))
+            k2.metric("Confirmados", len([d for d in datos if d['estado'] == "Confirmado"]))
+            k3.metric("Observados", len([d for d in datos if d['estado'] == "Observado"]))
+
+            st.download_button("📥 Generar Reporte PDF", data=generar_pdf(datos), file_name="auditoria_euro.pdf")
+            
             for i in datos:
-                with st.expander(f"{i['fecha']} | {i['equipo']}"):
+                color = "🟠" if i['estado'] == "Pendiente" else "🟢" if i['estado'] == "Confirmado" else "🔴"
+                with st.expander(f"{color} {i['fecha']} | {i['equipo']} - {i.get('area', 'N/A')}"):
+                    st.write(f"**Técnico:** {i['tecnico']}")
                     st.write(f"**Descripción:** {i['descripcion']}")
+                    if i.get('comentario_supervisor'):
+                        st.info(f"🗨️ {i['comentario_supervisor']}")
+                    if i['url_multimedia']:
+                        if ".mp4" in i['url_multimedia'].lower(): st.video(i['url_multimedia'])
+                        else: st.image(i['url_multimedia'], use_container_width=True)
+                    
                     if es_admin:
-                        # USO DEL ID PARA ACTUALIZAR
-                        if st.button("✅ Confirmar", key=f"ok_{i['id']}"):
-                            supabase.table("reportes_euro").update({"estado": "Confirmado"}).eq("id", i['id']).execute()
+                        st.divider()
+                        obs = st.text_input("Comentario de revisión", key=f"o_{i['id']}")
+                        firma = f"{obs} (Revisado por: {u_actual})"
+                        ca, cb, cc = st.columns(3)
+                        if ca.button("✅ Confirmar", key=f"ok_{i['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Confirmado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
                             st.rerun()
-                        if st.button("🗑️ Eliminar", key=f"del_{i['id']}"):
-                            supabase.table("reportes_euro").delete().eq("id", i['id']).execute()
+                        if cb.button("❌ Observar", key=f"no_{i['id']}"):
+                            supabase.table("reportes_euro").update({"estado": "Observado", "comentario_supervisor": firma}).eq("id", i['id']).execute()
                             st.rerun()
+                        if cc.checkbox("Eliminar", key=f"del_c_{i['id']}"):
+                            if st.button("Confirmar Borrado", key=f"del_b_{i['id']}"):
+                                supabase.table("reportes_euro").delete().eq("id", i['id']).execute()
+                                st.rerun()
 
     if menu == "👥 Personal":
-        st.header("👥 Personal")
+        st.header("👥 Gestión de Usuarios")
         u_res = supabase.table("usuarios").select("*").execute()
         for us in u_res.data:
-            st.write(f"👤 {us['usuario']}")
-            if st.button("Eliminar", key=f"u_{us['id']}"):
-                supabase.table("usuarios").delete().eq("id", us['id']).execute()
-                st.rerun()
+            c_u, c_b = st.columns([3, 1])
+            c_u.write(f"👤 {us['usuario']} (C.I: {us.get('cedula', 'N/A')})")
+            if us['usuario'] != u_actual:
+                # CORRECCIÓN: Usamos el ID para eliminar, si no existe el ID usamos el nombre de usuario
+                user_id = us.get('id', us['usuario'])
+                if c_b.button("Eliminar", key=f"du_{user_id}"):
+                    supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()
+                    st.rerun()
+            st.divider()

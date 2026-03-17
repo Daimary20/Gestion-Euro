@@ -95,7 +95,6 @@ if not st.session_state['autenticado']:
         if st.button("Crear Usuario"):
             if cod == CODIGO_REGISTRO_ADMIN:
                 if user_alias and ced and cla:
-                    # CORRECCIÓN: Se quita 'nombre_completo' porque no existe en la tabla de tu captura
                     supabase.table("usuarios").insert({
                         "usuario": user_alias, 
                         "cedula": ced, 
@@ -131,8 +130,10 @@ if not st.session_state['autenticado']:
 else:
     # --- PANEL PRINCIPAL ---
     u_actual = st.session_state['usuario']
-    # SE AÑADE 'Cmorales' a la lista de administradores
-    es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas", "Cmorales"])
+    
+    # CORRECCIÓN DE ACCESO: Se asegura que CMorales y los cargos clave tengan acceso total
+    admin_list = ["supervisor", "arquitecto", "ingeniero", "jefe", "asistente", "daimary salas", "cmorales"]
+    es_admin = any(x in u_actual.lower() for x in admin_list)
 
     st.sidebar.title("Euro Control")
     st.sidebar.write(f"👤 {u_actual}")

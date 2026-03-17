@@ -95,7 +95,7 @@ if not st.session_state['autenticado']:
         if st.button("Crear Usuario"):
             if cod == CODIGO_REGISTRO_ADMIN:
                 if user_alias and ced and cla:
-                    # CORRECCIÓN: Eliminamos 'nombre_completo' porque no existe en tu tabla 'usuarios'
+                    # CORRECCIÓN: Se quita 'nombre_completo' porque no existe en la tabla de tu captura
                     supabase.table("usuarios").insert({
                         "usuario": user_alias, 
                         "cedula": ced, 
@@ -131,7 +131,8 @@ if not st.session_state['autenticado']:
 else:
     # --- PANEL PRINCIPAL ---
     u_actual = st.session_state['usuario']
-    es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas"])
+    # SE AÑADE 'Cmorales' a la lista de administradores
+    es_admin = any(x in u_actual for x in ["Supervisor", "Arquitecto", "Ingeniero", "Jefe", "Asistente", "Daimary Salas", "Cmorales"])
 
     st.sidebar.title("Euro Control")
     st.sidebar.write(f"👤 {u_actual}")
@@ -221,9 +222,7 @@ else:
             c_u, c_b = st.columns([3, 1])
             c_u.write(f"👤 {us['usuario']} (C.I: {us.get('cedula', 'N/A')})")
             if us['usuario'] != u_actual:
-                # CORRECCIÓN: Usamos el ID para eliminar, si no existe el ID usamos el nombre de usuario
-                user_id = us.get('id', us['usuario'])
-                if c_b.button("Eliminar", key=f"du_{user_id}"):
+                if c_b.button("Eliminar", key=f"du_{us.get('id', us['usuario'])}"):
                     supabase.table("usuarios").delete().eq("usuario", us['usuario']).execute()
                     st.rerun()
             st.divider()
